@@ -3,7 +3,7 @@
 import subprocess
 from textwrap import dedent
 
-class interpose(object):
+class Interpose(object):
    def __init__(self, header, api):
       self.header = header
       self.out_lib = 'libinterpose_{0}.so'.format(self.header)
@@ -13,12 +13,12 @@ class interpose(object):
       self.wrote = False
    def generate(self):
       if not self.code:
-         INCLUDES=(
+         includes=(
             '<stdio.h>',
             '<dlfcn.h>',
             '<sys/time.h>',
             '"{0}"'.format(self.header))
-         result = '\n'.join('#include {0}'.format(i) for i in INCLUDES) + dedent('''
+         result = '\n'.join('#include {0}'.format(i) for i in includes) + dedent('''
 
          struct timeval current_time()
          {
@@ -33,9 +33,7 @@ class interpose(object):
          }
          ''')
          for function in self.api:
-            name = function[0]
-            args = function[1]
-            retn = function[2]
+            name, args, retn = function[:3]
             if retn == 'void':
                save_result = ''
                retn_result = ''
@@ -121,7 +119,7 @@ class interpose(object):
 
 def main():
    API=('test_api.h', ('api_call', (('argc','int'),('argv', 'char **')), 'int', '-1'))
-   i = interpose(header = API[0], api = API[1:])
+   i = Interpose(header = API[0], api = API[1:])
    i.build()
 
 if __name__ == "__main__":
