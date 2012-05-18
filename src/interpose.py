@@ -3,11 +3,15 @@
 import subprocess
 from textwrap import dedent
 
+# platform.system() == 'Darwin'
+
 class Interpose(object):
-   def __init__(self, header, api):
+   def __init__(self, header, lib, api):
       self.header = header
-      self.out_lib = 'libinterpose_{0}.so'.format(self.header)
-      self.out_header = 'interpose_{0}'.format(self.header)
+      self.lib = lib
+      #self.out_lib = 'libinterpose_{0}.so'.format(self.header)
+      self.out_lib = 'libinterpose_{0}.dylib'.format(self.header)
+      self.out_body = 'interpose_{0}.c'.format(self.header)
       self.api = api
       self.code = ''
       self.wrote = False
@@ -67,7 +71,11 @@ class Interpose(object):
                // find the original function
                if(!real_{1})
                {{
-                  real_{1} = dlsym(RTLD_NEXT, "{1}");
+                  // grab handle to the original library
+                  void *handle = dlopen("{8}", RTLD_NOW);
+
+                  // find the original function within that library
+                  real_{1} = ({0} (*)({3}))dlsym(handle, "{1}");
 
                   // if the original function is not found...
                   if(!real_{1})
@@ -105,21 +113,23 @@ class Interpose(object):
                ', '.join(arg[0] for arg in args),
                save_result,
                retn_result,
-               dflt_result))
+               dflt_result,
+               self.lib))
          self.code = result
       return self.code
    def write(self):
       if not self.wrote:
-         with open(self.out_header, 'w') as f:
+         with open(self.out_body, 'w') as f:
             f.write(self.generate())
          self.wrote = True
    def build(self):
       self.write()
-      subprocess.call(['gcc', '-shared', '-fPIC', '-Wall', '-Werror', '-std=c99', '-D_GNU_SOURCE', '-o', self.out_lib, self.out_header, '-ldl'])
+      #subprocess.call(['gcc', '-shared', '-fPIC', '-Wall', '-Werror', '-std=c99', '-D_GNU_SOURCE', '-o', self.out_lib, self.out_header, '-ldl'])
+      subprocess.call(['gcc', '-flat_namespace', '-dynamiclib', '-fPIC', '-Wall', '-Werror', '-std=c99', '-o', self.out_lib, self.out_body])
 
 def main():
-   API=('test_api.h', ('api_call', (('argc','int'),('argv', 'char **')), 'int', '-1'))
-   i = Interpose(header = API[0], api = API[1:])
+   API=('test_api.h', 'libtest_api.dylib', ('api_call', (('argc','int'),('argv', 'char **')), 'int', '-1'), ('api_simple', (), 'void'))
+   i = Interpose(header = API[0], lib = API[1], api = API[2:])
    i.build()
 
 if __name__ == "__main__":
