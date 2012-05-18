@@ -21,7 +21,7 @@ test-api:
 test-app: test-api
 	gcc -Wall -Werror -std=c99 -o test_app test_app.c $(LIBS)
 
-test: test-api
+test: test-app
 	$(PRELOAD) ./test_app one two three
 
 clean:
