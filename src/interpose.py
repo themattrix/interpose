@@ -9,8 +9,8 @@ class Interpose(object):
    def __init__(self, header, lib, api):
       self.header = header
       self.lib = lib
-      #self.out_lib = 'libinterpose_{0}.so'.format(self.header)
-      self.out_lib = 'libinterpose_{0}.dylib'.format(self.header)
+      self.out_lib = 'libinterpose_{0}.so'.format(self.header)
+      #self.out_lib = 'libinterpose_{0}.dylib'.format(self.header)
       self.out_body = 'interpose_{0}.c'.format(self.header)
       self.api = api
       self.code = ''
@@ -71,11 +71,16 @@ class Interpose(object):
                // find the original function
                if(!real_{1})
                {{
+            #ifdef __APPLE__
                   // grab handle to the original library
                   void *handle = dlopen("{8}", RTLD_NOW);
 
                   // find the original function within that library
                   real_{1} = ({0} (*)({3}))dlsym(handle, "{1}");
+            #else
+                  // find the original function
+                  real_{1} = dlsym(RTLD_NEXT, "{1}");
+            #endif
 
                   // if the original function is not found...
                   if(!real_{1})
@@ -124,8 +129,8 @@ class Interpose(object):
          self.wrote = True
    def build(self):
       self.write()
-      #subprocess.call(['gcc', '-shared', '-fPIC', '-Wall', '-Werror', '-std=c99', '-D_GNU_SOURCE', '-o', self.out_lib, self.out_header, '-ldl'])
-      subprocess.call(['gcc', '-flat_namespace', '-dynamiclib', '-fPIC', '-Wall', '-Werror', '-std=c99', '-o', self.out_lib, self.out_body])
+      subprocess.call(['gcc', '-shared', '-fPIC', '-Wall', '-Werror', '-std=c99', '-D_GNU_SOURCE', '-o', self.out_lib, self.out_body, '-ldl'])
+      #subprocess.call(['gcc', '-flat_namespace', '-dynamiclib', '-fPIC', '-Wall', '-Werror', '-std=c99', '-o', self.out_lib, self.out_body, '-ldl'])
 
 def main():
    API=('test_api.h', 'libtest_api.dylib', ('api_call', (('argc','int'),('argv', 'char **')), 'int', '-1'), ('api_simple', (), 'void'))

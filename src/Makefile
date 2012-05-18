@@ -10,7 +10,7 @@ else
 	SHARED = -shared
 	SO = so
 	LIBS = -L. -ltest_api
-	PRELOAD = LD_PRELOAD=./libinterpose_test_api.h.$(SO)
+	PRELOAD = LD_LIBRARY_PATH=. LD_PRELOAD=./libinterpose_test_api.h.$(SO)
 endif
 
 all: test-app
