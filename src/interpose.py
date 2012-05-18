@@ -1,22 +1,32 @@
 #!/usr/bin/python
 
+import platform
 import subprocess
+
 from textwrap import dedent
 
-# platform.system() == 'Darwin'
+if platform.system() == 'Darwin':
+   SO_EXTENSION = 'dylib'
+   CC           = 'gcc'
+   CC_FLAGS     = ['-fPIC', '-Wall', '-Werror', '-std=c99', '-flat_namespace', '-dynamiclib']
+   CC_LIBS      = ['-ldl']
+else:
+   SO_EXTENSION = 'so'
+   CC           = 'gcc'
+   CC_FLAGS     = ['-fPIC', '-Wall', '-Werror', '-std=c99', '-shared', '-D_GNU_SOURCE']
+   CC_LIBS      = ['-ldl']
 
 class Interpose(object):
    def __init__(self, header, lib, api):
       self.header = header
       self.lib = lib
-      self.out_lib = 'libinterpose_{0}.so'.format(self.header)
-      #self.out_lib = 'libinterpose_{0}.dylib'.format(self.header)
+      self.out_lib = 'libinterpose_{0}.{1}'.format(self.header, SO_EXTENSION)
       self.out_body = 'interpose_{0}.c'.format(self.header)
       self.api = api
-      self.code = ''
+      self.generated_code = ''
       self.wrote = False
    def generate(self):
-      if not self.code:
+      if not self.generated_code:
          includes=(
             '<stdio.h>',
             '<dlfcn.h>',
@@ -120,8 +130,8 @@ class Interpose(object):
                retn_result,
                dflt_result,
                self.lib))
-         self.code = result
-      return self.code
+         self.generated_code = result
+      return self.generated_code
    def write(self):
       if not self.wrote:
          with open(self.out_body, 'w') as f:
@@ -129,8 +139,7 @@ class Interpose(object):
          self.wrote = True
    def build(self):
       self.write()
-      subprocess.call(['gcc', '-shared', '-fPIC', '-Wall', '-Werror', '-std=c99', '-D_GNU_SOURCE', '-o', self.out_lib, self.out_body, '-ldl'])
-      #subprocess.call(['gcc', '-flat_namespace', '-dynamiclib', '-fPIC', '-Wall', '-Werror', '-std=c99', '-o', self.out_lib, self.out_body, '-ldl'])
+      subprocess.call([CC] + CC_FLAGS + ['-o', self.out_lib, self.out_body] + CC_LIBS)
 
 def main():
    API=('test_api.h', 'libtest_api.dylib', ('api_call', (('argc','int'),('argv', 'char **')), 'int', '-1'), ('api_simple', (), 'void'))
