@@ -1,0 +1,19 @@
+For a quick demo, run:
+$ make test-demo HEADER=test_api/test_api.h
+
+Otherwise, run:
+$ make interpose-src HEADER='api_header.h'
+
+...which will create a few files based on the header filename; in this case:
+   interpose_lib_api_header.cpp
+   interpose_usr_api_header.cpp
+
+The 'usr' C++ file should be all you have to modify for deciding what to do
+with each intercepted call.
+
+After you're done modifying the 'usr' file, run:
+$ make interpose-lib HEADER='api_header.h'
+
+If no compilation errors occurred, then an interposing library should have been
+built. To use it with an application that uses the intercepted API, run:
+$ make do-interpose HEADER='api_header.h' APP='api_test_app'

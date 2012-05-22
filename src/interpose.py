@@ -1,175 +1,192 @@
 #!/usr/bin/python
 
-import platform
+import pycparser
 import subprocess
+import sys
+import os
 
+from pycparser import c_generator, c_ast
 from textwrap import dedent
 
-if platform.system() == 'Darwin':
-   SO_EXTENSION = 'dylib'
-   CC           = 'gcc'
-   CC_FLAGS     = ['-fPIC', '-Wall', '-Werror', '-std=c99', '-flat_namespace', '-dynamiclib']
-   CC_LIBS      = ['-ldl']
-else:
-   SO_EXTENSION = 'so'
-   CC           = 'gcc'
-   CC_FLAGS     = ['-fPIC', '-Wall', '-Werror', '-std=c99', '-shared', '-D_GNU_SOURCE']
-   CC_LIBS      = ['-ldl']
-
 def audit(message):
-   """Currently just a wrapper for print()."""
-   print(message)
+   """ Currently just a thin wrapper for print(). """
+   print(">>> {0}".format(message))
 
 class Interpose(object):
-   """
-   Generate, write out, and compile C code for interposing API calls. The resulting library can be
-   used to intercept API calls for the specified function signatures if it is loaded before the
-   original library. On linux, this is achieved with the 'LD_PRELOAD=/path/to/lib.so' variable. On
-   OS X, use the 'DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=/path/to/lib.dylib' variables.
+   """ Generate and write out C code for interposing API calls. The resulting library code can be
+       used to intercept API calls for the specified function signatures if it is loaded before
+       the original library. On linux, this is achieved with the following variable:
+         LD_PRELOAD=/path/to/lib.so
+       On OS X, use the following variables:
+         DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=/path/to/lib.dylib
    """
    def __init__(self, header, lib, api):
       self.real_header = header
       self.real_lib = lib
-      self.interpose_lib = 'libinterpose_{0}.{1}'.format(self.real_header, SO_EXTENSION)
-      self.interpose_source = 'interpose_{0}.c'.format(self.real_header)
       self.api = api
-      self.generated_code = ''
+      header_path, header_base = os.path.split(header)
+      header_base = os.path.splitext(header_base)[0]
+      self.generated_lib_path = '{0}/interpose_lib_{1}.cpp'.format(header_path or '.', header_base)
+      self.generated_usr_path = '{0}/interpose_usr_{1}.cpp'.format(header_path or '.', header_base)
+      self.generated_lib_code = ''
+      self.generated_usr_code = ''
       self.wrote = False
-   def generate(self):
-      if not self.generated_code:
-         includes=(
-            '<stdio.h>',
-            '<dlfcn.h>',
-            '<sys/time.h>',
-            '"{0}"'.format(self.real_header))
-         result = '\n'.join('#include {0}'.format(i) for i in includes) + dedent('''
-
-         struct timeval current_time()
-         {
-            // store a precise time-stamp
-            struct timeval time;
-
-            // capture the current time
-            gettimeofday(&time, NULL);
-            
-            // return the time
-            return time;
-         }
-         ''')
-         for function in self.api:
-            name, args, retn = function[:3]
-            if retn == 'void':
-               save_result = ''
-               retn_result = ''
-               dflt_result = 'return;'
-            else:
-               dflt = function[3]
-               save_result = "{0} result = ".format(retn)
-               retn_result = '''
-               
-               // return the actual result
-               return result;'''
-               dflt_result = "return {0};".format(dflt)
-            result += dedent((
-            '''
-            {0} {1}({2})
-            {{
-               // points to the original function being interposed
-               static {0} (*real_{1})({3}) = NULL;
-
-               // record the timestamp before the call
-               struct timeval call_timestamp = current_time();
-
-               // print the time-stamp
-               printf
-               (
-                  "[%011llu.%06llu][call] {1}()\\n",
-                  (long long unsigned)call_timestamp.tv_sec,
-                  (long long unsigned)call_timestamp.tv_usec
-               );
-
-               // find the original function
-               if(!real_{1})
-               {{
-            #ifdef __APPLE__
-                  /** 
-                   ** On OS X, the original library is loaded explicitly and the function is
-                   ** queried from within that library. This technique does not work on linux; it
-                   ** results in an infinite recursion.
-                   **/
-
-                  // grab handle to the original library
-                  void *handle = dlopen("{8}", RTLD_NOW);
-
-                  // find the original function within that library
-                  real_{1} = ({0} (*)({3}))dlsym(handle, "{1}");
-            #else
-                  /** 
-                   ** Retrieving a pointer to the original function is even easier in linux.
-                   ** Calling dlsym() with the flag "RTLD_NEXT" returns the *next* occurrence of
-                   ** the specified name, which is the original library call This does not work
-                   ** on OS X; it fails to find the function.
-                   **/
-
-                  // find the original function
-                  real_{1} = dlsym(RTLD_NEXT, "{1}");
-            #endif
-
-                  // if the original function is not found...
-                  if(!real_{1})
-                  {{
-                     // ...print an error...
-                     printf("   >>> ERROR: {1}() not found\\n");
-
-                     // ...and return immediately
-                     {7}
-                  }}
-               }}
-
-               // run the original function
-               {5}real_{1}({4});
-
-               // record the timestamp after the call
-               struct timeval done_timestamp = current_time();
-
-               // print the time-stamp
-               printf
-               (
-                  "   >>> duration: %llu.%06llu seconds\\n"
-                  "[%011llu.%06llu][done] {1}()\\n",
-                  (long long unsigned)(done_timestamp.tv_sec  - call_timestamp.tv_sec),
-                  (long long unsigned)(done_timestamp.tv_usec - call_timestamp.tv_usec),
-                  (long long unsigned)done_timestamp.tv_sec,
-                  (long long unsigned)done_timestamp.tv_usec
-               );{6}
-            }}
-            ''').format(
-               retn,
-               name,
-               ', '.join('{0} {1}'.format(arg[1], arg[0]) for arg in args),
-               ', '.join(arg[1] for arg in args),
-               ', '.join(arg[0] for arg in args),
-               save_result,
-               retn_result,
-               dflt_result,
-               self.real_lib))
-         self.generated_code = result
-      return self.generated_code
+   def extract_label(self, template, label):
+      tag = '{{' + label
+      loc = template.find(tag)
+      if loc == -1:
+         return template, '', ''
+      col = template.find(':', loc + len(tag))
+      if col == -1:
+         return template, '', ''
+      cut = template[col + 1:]
+      stack = 2
+      c_pos = 0
+      found = False
+      for c in cut:
+         if c == '{':
+            stack += 1
+         elif c == '}':
+            stack -= 1
+            if stack == 0:
+               found = True
+               break
+         c_pos += 1
+      if not found:
+         audit("ERROR: Non-terminating '{0}' tag".format(label))
+         sys.exit(1)
+      # Adjust for the terminating }} being two-characters wide
+      return template[:loc], cut[c_pos + 1:], cut[:c_pos - 1]
+   def generate_code(self, template_file):
+      template = ''
+      with open(template_file, 'r') as f:
+         template = f.read()
+         template = template.replace('{{ORIGINAL_HEADER}}', os.path.split(self.real_header)[1])
+         template = template.replace('{{USER_DEFINED_FUNCTIONS}}', os.path.split(self.generated_usr_path)[1])
+         template = template.replace('{{APPLE_LIB_NAME}}', os.path.split(self.real_lib)[1])
+         while True:
+            template_pre, template_post, label = self.extract_label(template, 'FOR_EACH_FUNCTION')
+            if not label:
+               break
+            label = label.strip()
+            func_group = ''
+            for func in self.api:
+               func_src = label
+               func_src = func_src.replace('{{NAME}}', func[0])
+               func_src = func_src.replace('{{RETURN_TYPE}}', func[1])
+               func_src = func_src.replace('{{ARGUMENT_NAMES}}', func[2])
+               func_src = func_src.replace('{{ARGUMENT_TYPES}}', func[3])
+               func_src = func_src.replace('{{ARGUMENT_LIST}}', func[4])
+               func_src = func_src.replace('{{,ARGUMENT_NAMES}}', ', ' + func[2] if func[2] else '')
+               func_src = func_src.replace('{{,ARGUMENT_TYPES}}', ', ' + func[3] if func[3] else '')
+               func_src = func_src.replace('{{,ARGUMENT_LIST}}', ', ' + func[4] if func[4] else '')
+               while True:
+                  func_src_pre, func_src_post, nonvoid = self.extract_label(func_src, 'IF_NONVOID')
+                  if not nonvoid:
+                     break
+                  func_src = '{0}{1}{2}'.format(func_src_pre, nonvoid if func[1] != 'void' else '', func_src_post)
+               func_group += '\n{0}\n'.format(func_src)
+            template = '{0}{1}{2}'.format(template_pre, func_group.strip(), template_post)
+      return template
+   def generate_lib_code(self):
+      if not self.generated_lib_code:
+         self.generated_lib_code = self.generate_code('interpose_template_lib.cpp')
+      return self.generated_lib_code
+   def generate_usr_code(self):
+      if not self.generated_usr_code:
+         self.generated_usr_code = self.generate_code('interpose_template_usr.cpp')
+      return self.generated_usr_code
    def write(self):
-      if not self.wrote:
-         with open(self.interpose_source, 'w') as f:
-            f.write(self.generate())
-         self.wrote = True
-   def build(self):
-      self.write()
-      cmd = [CC] + CC_FLAGS + ['-o', self.interpose_lib, self.interpose_source] + CC_LIBS
-      audit(">>> {0}".format(' '.join(c for c in cmd)))
-      subprocess.call(cmd)
+      if self.wrote:
+         return
+      audit("Writing: {0}".format(self.generated_lib_path))
+      with open(self.generated_lib_path, 'w') as f:
+         f.write(self.generate_lib_code())
+      audit("Writing: {0}".format(self.generated_usr_path))
+      with open(self.generated_usr_path, 'w') as f:
+         f.write(self.generate_usr_code())
+      self.wrote = True
+
+class ParamListVisitor(c_generator.CGenerator):
+   def _generate_type(self, n, modifiers=[]):
+      """ Recursive generation from a type node. n is the type node. 'modifiers' collects the
+          PtrDecl, ArrayDecl and FuncDecl modifiers encountered on the way down to a TypeDecl, to
+          allow proper generation from it.
+
+          Note: This is a lightly modified version of the parent method to NOT build in the names.
+      """
+      typ = type(n)
+      
+      if typ == c_ast.TypeDecl:
+         s = ''
+         if n.quals: s += ' '.join(n.quals) + ' '
+         s += self.visit(n.type)
+         
+         # This was changed from the commented-out version so that no names are used
+         nstr = '' # n.declname if n.declname else ''
+         # Resolve modifiers.
+         # Wrap in parens to distinguish pointer to array and pointer to
+         # function syntax.
+         #
+         for i, modifier in enumerate(modifiers):
+            if isinstance(modifier, c_ast.ArrayDecl):
+               if (i != 0 and isinstance(modifiers[i - 1], c_ast.PtrDecl)):
+                  nstr = '(' + nstr + ')'
+               nstr += '[' + self.visit(modifier.dim) + ']'
+            elif isinstance(modifier, c_ast.FuncDecl):
+               if (i != 0 and isinstance(modifiers[i - 1], c_ast.PtrDecl)):
+                  nstr = '(' + nstr + ')'
+               nstr += '(' + self.visit(modifier.args) + ')'
+            elif isinstance(modifier, c_ast.PtrDecl):
+               if modifier.quals:
+                  nstr = '* %s %s' % (' '.join(modifier.quals), nstr)
+               else:
+                  nstr = '*' + nstr
+         if nstr: s += ' ' + nstr
+         return s
+      elif typ == c_ast.Decl:
+         return self._generate_decl(n.type)
+      elif typ == c_ast.Typename:
+         return self._generate_type(n.type)
+      elif typ == c_ast.IdentifierType:
+         return ' '.join(n.names) + ' '
+      elif typ in (c_ast.ArrayDecl, c_ast.PtrDecl, c_ast.FuncDecl):
+         return self._generate_type(n.type, modifiers + [n])
+      else:
+         return self.visit(n)
+
+class FuncDeclVisitor(c_ast.NodeVisitor):
+   def __init__(self):
+      super(FuncDeclVisitor, self).__init__()
+      self.functions = []
+   def visit_Decl(self, node):
+      """ For each encountered function declaration, this function records a tuple of the following values:
+            [0] function name
+            [1] return type
+            [2] comma-delimited argument names
+            [3] comma-delimited argument types
+            [4] comma-delimited argument names and types
+      """
+      if type(node.type) == c_ast.FuncDecl:
+         self.functions.append((
+            node.name,
+            ParamListVisitor()._generate_type(node.type.type),
+            ', '.join(decl.name for _, decl in node.type.args.children()) if node.type.args else '',
+            ParamListVisitor().visit(node.type.args) if node.type.args else '',
+            c_generator.CGenerator().visit(node.type.args) if node.type.args else ''))
+
+def parse_header(filename):
+   visitor = FuncDeclVisitor()
+   visitor.visit(pycparser.parse_file(filename, use_cpp = True))
+   return visitor.functions
 
 def main():
-   API=('test_api.h', 'libtest_api.dylib', ('api_call', (('argc','int'),('argv', 'char **')), 'int', '-1'), ('api_simple', (), 'void'))
-   i = Interpose(header = API[0], lib = API[1], api = API[2:])
-   i.build()
+   header = sys.argv[1]
+   lib = sys.argv[2] if len(sys.argv) > 2 else ''
+   interpose = Interpose(header, lib, api = parse_header(header))
+   interpose.write()
+   audit('NOTE: Edit the generated "{0}" file, then run "make interpose-lib HEADER={1}"'
+         ' to build the interposing library'.format(interpose.generated_usr_path, header))
 
 if __name__ == "__main__":
    main()
