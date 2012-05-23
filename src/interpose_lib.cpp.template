@@ -179,8 +179,12 @@ static auto proxy_{{NAME}}({{ARGUMENT_LIST}}) -> {{RETURN_TYPE}}
 {
    // points to the original function being interposed
    static {{RETURN_TYPE}} (*original)({{ARGUMENT_TYPES}}) = NULL;
-
-   {{IF_NONVOID:return }}util::interpose(&{{NAME}}, "{{NAME}}", original{{IF_NONVOID:, {{RETURN_TYPE}}()}}{{,ARGUMENT_NAMES}});
+   {{IF_NONVOID:
+   // typedef the return type so that the default constructor can be used for pointer types also
+   typedef {{RETURN_TYPE}} {{NAME}}_return_type;
+   }}
+   // call the generic interposing function to handle the details
+   {{IF_NONVOID:return }}util::interpose(&{{NAME}}, "{{NAME}}", original{{IF_NONVOID:, {{NAME}}_return_type()}}{{,ARGUMENT_NAMES}});
 }
 }}
 
