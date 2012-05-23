@@ -168,16 +168,23 @@ class FuncDeclVisitor(c_ast.NodeVisitor):
             [4] comma-delimited argument names and types
       """
       if type(node.type) == c_ast.FuncDecl:
+         # decl.name can be None in the following situation:
+         #    int func(void);
+         # In this case, the argument list should be empty. For this reason, we store the list of argument
+         # names here so that the argument-types and argument-name-and-type lists can be skipped if there
+         # are no arguments.
+         arg_names = ', '.join((decl.name or '') for _, decl in node.type.args.children()) if node.type.args else ''
          self.functions.append((
             node.name,
             ParamListVisitor()._generate_type(node.type.type),
-            ', '.join(decl.name for _, decl in node.type.args.children()) if node.type.args else '',
-            ParamListVisitor().visit(node.type.args) if node.type.args else '',
-            c_generator.CGenerator().visit(node.type.args) if node.type.args else ''))
+            arg_names,
+            ParamListVisitor().visit(node.type.args) if arg_names else '',
+            c_generator.CGenerator().visit(node.type.args) if arg_names else ''))
 
 def parse_header(filename):
    visitor = FuncDeclVisitor()
-   visitor.visit(pycparser.parse_file(filename, use_cpp = True))
+   ast = pycparser.parse_file(filename, use_cpp = True)
+   visitor.visit(ast)
    return visitor.functions
 
 def main():
