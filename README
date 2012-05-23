@@ -5,7 +5,8 @@ Requires:
    Linux or OS X
 
 Note for OS X users: In addition to specifying 'HEADER', you must also specify
-'API_LIB' because the method for finding
+'API_LIB' because the method for finding the original library call requires the
+original library (unlike on Linux).
 
 Note for users of compilers in non-standard locations (like me): You can specify
 'CC' as the path to the C++ compiler.
