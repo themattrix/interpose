@@ -90,11 +90,11 @@ class Interpose(object):
       return template
    def generate_lib_code(self):
       if not self.generated_lib_code:
-         self.generated_lib_code = self.generate_code('interpose_template_lib.cpp')
+         self.generated_lib_code = self.generate_code('interpose_lib.cpp.template')
       return self.generated_lib_code
    def generate_usr_code(self):
       if not self.generated_usr_code:
-         self.generated_usr_code = self.generate_code('interpose_template_usr.cpp')
+         self.generated_usr_code = self.generate_code('interpose_usr.cpp.template')
       return self.generated_usr_code
    def write(self):
       if self.wrote:

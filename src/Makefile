@@ -6,32 +6,35 @@ HEADER_DIR  = $(shell dirname "$(HEADER)")
 HEADER_DIR ?= .
 HEADER_BASE = $(shell basename "$(HEADER)" .h)
 
-CC = g++
-FLAGS = -fPIC -Wall -Werror -std=c++0x
+CC    ?= g++
+FLAGS ?= -fPIC -Wall -Werror -std=c++0x
 
 UNAME := $(shell uname)
 
 ifeq ($(UNAME),Darwin)
-SHARED = -dynamiclib
-SO = dylib
+ifeq ($(API_LIB),)
+$(error No library file specified with "API=LIB=..." (required on OS X))
+endif
+SHARED        = -dynamiclib
+SO            = dylib
 INTERPOSE_LIB = $(HEADER_DIR)/libinterpose_$(HEADER_BASE).$(SO)
 INTERPOSE_SRC = $(HEADER_DIR)/interpose_lib_$(HEADER_BASE).cpp
-PRELOAD = DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=$(INTERPOSE_LIB)
-DEFINES =
-LIBS = -ldl
+PRELOAD       = DYLD_LIBRARY_PATH=$(HEADER_DIR) DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=$(INTERPOSE_LIB)
+DEFINES       =
+LIBS          = -ldl
 else
-SHARED = -shared
-SO = so
+SHARED        = -shared
+SO            = so
 INTERPOSE_LIB = $(HEADER_DIR)/libinterpose_$(HEADER_BASE).$(SO)
 INTERPOSE_SRC = $(HEADER_DIR)/interpose_lib_$(HEADER_BASE).cpp
-PRELOAD = LD_LIBRARY_PATH=$(HEADER_DIR) LD_PRELOAD=$(INTERPOSE_LIB)
-DEFINES = -D_GNU_SOURCE
-LIBS = -ldl
+PRELOAD       = LD_LIBRARY_PATH=$(HEADER_DIR) LD_PRELOAD=$(INTERPOSE_LIB)
+DEFINES       = -D_GNU_SOURCE
+LIBS          = -ldl
 endif
 
-TEST_CMD = $(PRELOAD) test_api/test_app one two three
+TEST_CMD      = $(PRELOAD) test_api/test_app one two three
 
-INTERPOSE_CMD = ./interpose.py $(HEADER)
+INTERPOSE_CMD = ./interpose.py $(HEADER) $(API_LIB)
 
 all: interpose-src test
 
