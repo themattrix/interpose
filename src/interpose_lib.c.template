@@ -1,0 +1,107 @@
+#include <stdio.h>
+#include <dlfcn.h>
+#include <sys/time.h>
+#include "{{ORIGINAL_HEADER}}"
+
+/* insert the user-defined functions */
+#include "{{USER_DEFINED_FUNCTIONS}}"
+
+#ifdef __APPLE__
+/* retrieving the original function call on OS X requires the library name */
+static const char LIB_NAME[] = "{{APPLE_LIB_NAME}}";
+#endif
+
+static void print_call(const struct timeval *call, char const *function)
+{
+   printf
+   (
+      "[%011llu.%06llu][call] %s()\n",
+      (long long unsigned)call->tv_sec,
+      (long long unsigned)call->tv_usec,
+      function
+   );
+}
+
+static void print_done(const struct timeval *call, const struct timeval *done, char const *function)
+{
+   long long unsigned diff = 
+      ((long long unsigned)done->tv_sec * 1000000ull + (long long unsigned)done->tv_usec) -
+      ((long long unsigned)call->tv_sec * 1000000ull + (long long unsigned)call->tv_usec);
+
+   printf
+   (
+      "[%011llu.%06llu][done][%llu.%06llu] %s()\n",
+      (long long unsigned)done->tv_sec,
+      (long long unsigned)done->tv_usec,
+      diff / 1000000ull,
+      diff % 1000000ull,
+      function
+   );
+}
+
+{{FOR_EACH_FUNCTION:
+{{RETURN_TYPE}} {{NAME}}({{ARGUMENT_LIST}})
+{
+   /* points to the original function being interposed */
+   static {{RETURN_TYPE}} (*original)({{ARGUMENT_TYPES}}) = NULL;
+
+   if(original == NULL)
+   {
+#ifdef __APPLE__
+      /** 
+       ** On OS X, the original library is loaded explicitly and the function is
+       ** queried from within that library. This technique does not work on linux; it
+       ** results in an infinite recursion.
+       **/
+
+      /* grab handle to the original library */
+      void *handle = dlopen(LIB_NAME, RTLD_NOW);
+
+      /* find the original function within that library */
+      original = ({{RETURN_TYPE}} (*)({{ARGUMENT_TYPES}}))dlsym(handle, "{{NAME}}");
+#else
+      /** 
+       ** Retrieving a pointer to the original function is even easier in linux. It
+       ** doesn't even require the original library name. Calling dlsym() with the
+       ** flag "RTLD_NEXT" returns the *next* occurrence of the specified name, which
+       ** is the original library call. This does not work on OS X; it fails to find
+       ** the function.
+       **/
+
+      /* find the original function */
+      original = ({{RETURN_TYPE}} (*)({{ARGUMENT_TYPES}}))dlsym(RTLD_NEXT, "{{NAME}}");
+#endif
+
+      /* if the original function was not located, call the missing_* function */
+      if(original == NULL)
+      {
+         {{IF_NONVOID:return }}missing_{{NAME}}({{ARGUMENT_NAMES}});{{IF_VOID:
+         return;}}
+      }
+   }
+
+   /* stores the time immediately before the function call wrapper */
+   struct timeval call;
+
+   /* get the current time */
+   gettimeofday(&call, NULL);
+
+   /* output the timestamp */
+   print_call(&call, "{{NAME}}");
+
+   /* call the user wrapper to the original function */
+   {{IF_NONVOID:{{RETURN_TYPE}} result = }}wrap_{{NAME}}(original{{,ARGUMENT_NAMES}});
+
+   /* stores the time immediately after the function call wrapper */
+   struct timeval done;
+
+   /* get the current time */
+   gettimeofday(&done, NULL);
+
+   /* output the timestamp and time difference */
+   print_done(&call, &done, "{{NAME}}");{{IF_NONVOID:
+   
+   /* return the wrapper function result */
+   return result;}}
+}
+}}

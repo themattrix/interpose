@@ -1,6 +1,6 @@
 Requires:
-   C++11 (0x)-compatible compiler
    C99 compatible compiler
+   [for C++ support] C++11 (0x)-compatible compiler
    Python 2.7 and pycparser (available in PIP)
    Linux or OS X
 
@@ -40,3 +40,8 @@ generated file names.)
 Note that the above command does not delete the generated (and possibly modified
 interposer files. To clean everything including the generated source files, run:
 $ make clean-all HEADER=...
+
+By default, interposing C++ code is generated and the time-stamps are calculated
+with <chrono>. To drop <chrono> and fall back to <sys/time.h>, specify the
+'NO_CHRONO=1' flag. To fall back to C instead of C++, specify the 'NO_CPP=1'
+flag (implies NO_CHRONO).

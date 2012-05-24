@@ -1,45 +1,61 @@
 ifeq ($(HEADER),)
-$(error No header file specified with "HEADER=...")
+   $(error No header file specified with "HEADER=...")
 endif
 
+# Use C++ by default, unless "NO_CPP" is specified
+ifeq ($(NO_CPP),)
+   EXT           = cpp
+   CC           ?= g++
+   LANG_STD     ?= c++0x
+   LIB_TEMPLATE ?= interpose_lib.cpp.template
+   USR_TEMPLATE ?= interpose_usr.cpp.template
+else
+   EXT           = c
+   NO_CHRONO     = 1
+   CC           ?= gcc
+   LANG_STD     ?= c99
+   LIB_TEMPLATE ?= interpose_lib.c.template
+   USR_TEMPLATE ?= interpose_usr.c.template
+endif
+
+# When using C++, use <chrono> by default unless "NO_CHRONO" is specified
 ifeq ($(NO_CHRONO),)
-CHRONO_DEF = -DUSE_CHRONO
-CHRONO_LIB = -lstdc++
+   CHRONO_DEF = -DUSE_CHRONO
+   CHRONO_LIB = -lstdc++
 endif
 
 HEADER_DIR  = $(shell dirname "$(HEADER)")
 HEADER_DIR ?= .
 HEADER_BASE = $(shell basename "$(HEADER)" .h)
 
-CC    ?= g++
-FLAGS ?= -fPIC -Wall -Werror -std=c++0x $(CFLAGS)
+FLAGS ?= -fPIC -Wall -Werror -std=$(LANG_STD) $(CFLAGS)
 
 UNAME := $(shell uname)
 
 ifeq ($(UNAME),Darwin)
-ifeq ($(API_LIB),)
-$(error No library file specified with "API=LIB=..." (required on OS X))
-endif
-SHARED        = -dynamiclib
-SO            = dylib
-INTERPOSE_LIB = $(HEADER_DIR)/libinterpose_$(HEADER_BASE).$(SO)
-INTERPOSE_SRC = $(HEADER_DIR)/interpose_lib_$(HEADER_BASE).cpp
-PRELOAD       = DYLD_LIBRARY_PATH=$(HEADER_DIR) DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=$(INTERPOSE_LIB)
-DEFINES       = $(CHRONO_DEF)
-LIBS          = -ldl $(CHRONO_LIB)
+   ifeq ($(API_LIB),)
+      $(error No library file specified with "API=LIB=..." (required on OS X))
+   endif
+   SHARED        = -dynamiclib
+   SO            = dylib
+   INTERPOSE_LIB = $(HEADER_DIR)/libinterpose_$(HEADER_BASE).$(SO)
+   INTERPOSE_SRC = $(HEADER_DIR)/interpose_lib_$(HEADER_BASE).$(EXT)
+   PRELOAD       = DYLD_LIBRARY_PATH=$(HEADER_DIR) DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=$(INTERPOSE_LIB)
+   DEFINES       = $(CHRONO_DEF)
+   LIBS          = -ldl $(CHRONO_LIB)
 else
-SHARED        = -shared
-SO            = so
-INTERPOSE_LIB = $(HEADER_DIR)/libinterpose_$(HEADER_BASE).$(SO)
-INTERPOSE_SRC = $(HEADER_DIR)/interpose_lib_$(HEADER_BASE).cpp
-PRELOAD       = LD_LIBRARY_PATH=$(HEADER_DIR) LD_PRELOAD=$(INTERPOSE_LIB)
-DEFINES       = -D_GNU_SOURCE $(CHRONO_DEF)
-LIBS          = -ldl $(CHRONO_LIB)
+   SHARED        = -shared
+   SO            = so
+   INTERPOSE_LIB = $(HEADER_DIR)/libinterpose_$(HEADER_BASE).$(SO)
+   INTERPOSE_SRC = $(HEADER_DIR)/interpose_lib_$(HEADER_BASE).$(EXT)
+   PRELOAD       = LD_LIBRARY_PATH=$(HEADER_DIR) LD_PRELOAD=$(INTERPOSE_LIB)
+   DEFINES       = -D_GNU_SOURCE $(CHRONO_DEF)
+   LIBS          = -ldl $(CHRONO_LIB)
 endif
 
 TEST_CMD      ?= $(PRELOAD) test_api/test_app one two three
 
-INTERPOSE_CMD ?= ./interpose.py $(HEADER) $(API_LIB)
+INTERPOSE_CMD ?= ./interpose.py $(HEADER) $(LIB_TEMPLATE) $(USR_TEMPLATE) $(API_LIB)
 
 all: interpose-src test
 
@@ -88,7 +104,7 @@ clean-src:
 	@echo
 	@echo "==========================================================[ Cleaning source ]==="
 	rm -f $(INTERPOSE_SRC)
-	rm -f $(HEADER_DIR)/interpose_usr_$(HEADER_BASE).cpp
+	rm -f $(HEADER_DIR)/interpose_usr_$(HEADER_BASE).$(EXT)
 
 clean-test:
 	make -C test_api clean

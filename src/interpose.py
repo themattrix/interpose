@@ -20,14 +20,17 @@ class Interpose(object):
        On OS X, use the following variables:
          DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=/path/to/lib.dylib
    """
-   def __init__(self, header, lib, api):
+   def __init__(self, header, lib_template, usr_template, lib, api):
+      self.lib_template = lib_template
+      self.usr_template = usr_template
       self.real_header = header
       self.real_lib = lib
       self.api = api
       header_path, header_base = os.path.split(header)
       header_base = os.path.splitext(header_base)[0]
-      self.generated_lib_path = '{0}/interpose_lib_{1}.cpp'.format(header_path or '.', header_base)
-      self.generated_usr_path = '{0}/interpose_usr_{1}.cpp'.format(header_path or '.', header_base)
+      template_ext = os.path.splitext(os.path.splitext(lib_template)[0])[1]
+      self.generated_lib_path = '{0}/interpose_lib_{1}{2}'.format(header_path or '.', header_base, template_ext)
+      self.generated_usr_path = '{0}/interpose_usr_{1}{2}'.format(header_path or '.', header_base, template_ext)
       self.generated_lib_code = ''
       self.generated_usr_code = ''
       self.wrote = False
@@ -85,16 +88,21 @@ class Interpose(object):
                   if not nonvoid:
                      break
                   func_src = '{0}{1}{2}'.format(func_src_pre, nonvoid if func[1] != 'void' else '', func_src_post)
+               while True:
+                  func_src_pre, func_src_post, void = self.extract_label(func_src, 'IF_VOID')
+                  if not void:
+                     break
+                  func_src = '{0}{1}{2}'.format(func_src_pre, void if func[1] == 'void' else '', func_src_post)
                func_group += '\n{0}\n'.format(func_src)
             template = '{0}{1}{2}'.format(template_pre, func_group.strip(), template_post)
       return template
    def generate_lib_code(self):
       if not self.generated_lib_code:
-         self.generated_lib_code = self.generate_code('interpose_lib.cpp.template')
+         self.generated_lib_code = self.generate_code(self.lib_template)
       return self.generated_lib_code
    def generate_usr_code(self):
       if not self.generated_usr_code:
-         self.generated_usr_code = self.generate_code('interpose_usr.cpp.template')
+         self.generated_usr_code = self.generate_code(self.usr_template)
       return self.generated_usr_code
    def write(self):
       if self.wrote:
@@ -189,8 +197,10 @@ def parse_header(filename):
 
 def main():
    header = sys.argv[1]
-   lib = sys.argv[2] if len(sys.argv) > 2 else ''
-   interpose = Interpose(header, lib, api = parse_header(header))
+   lib_template = sys.argv[2]
+   usr_template = sys.argv[3]
+   lib = sys.argv[4] if len(sys.argv) > 4 else ''
+   interpose = Interpose(header, lib_template, usr_template, lib, api = parse_header(header))
    interpose.write()
    audit('NOTE: Edit the generated "{0}" file, then run "make interpose-lib HEADER={1}"'
          ' to build the interposing library'.format(interpose.generated_usr_path, header))

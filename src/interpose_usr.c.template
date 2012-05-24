@@ -1,0 +1,19 @@
+
+{{FOR_EACH_FUNCTION:
+/**
+ ** Called when the original {{NAME}}() cannot be located.
+ **/
+{{RETURN_TYPE}} missing_{{NAME}}({{ARGUMENT_LIST}})
+{
+   /* TODO: handle missing function */{{IF_NONVOID:
+   return /* TODO: return value or exit */;}}
+}
+
+/**
+ ** When the original {{NAME}} is successfully located, this function intercepts that call.
+ **/
+{{RETURN_TYPE}} wrap_{{NAME}}({{RETURN_TYPE}} (*original)({{ARGUMENT_TYPES}}){{,ARGUMENT_LIST}})
+{
+   {{IF_NONVOID:return }}original({{ARGUMENT_NAMES}});
+}
+}}
