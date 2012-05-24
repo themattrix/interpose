@@ -2,7 +2,6 @@
 extern "C" {
 #endif
 
-#include <dlfcn.h>
 #include "{{ORIGINAL_HEADER}}"
 
 #ifdef __cplusplus
@@ -10,7 +9,13 @@ extern "C" {
 #endif
 
 #include <cstdio>
+#include <dlfcn.h>
+
+#ifdef USE_CHRONO
 #include <chrono>
+#else
+#include <sys/time.h>
+#endif
 
 // insert the user-defined functions
 #include "{{USER_DEFINED_FUNCTIONS}}"
@@ -20,6 +25,48 @@ namespace util
 #ifdef __APPLE__
    // retrieving the original function call on OS X requires the library name
    static const char LIB_NAME[] = "{{APPLE_LIB_NAME}}";
+#endif
+
+#ifndef USE_CHRONO
+   static auto current_time() -> timeval
+   {
+      // store a precise time-stamp
+      timeval time;
+
+      // capture the current time
+      gettimeofday(&time, NULL);
+
+      // return the time
+      return time;
+   }
+
+   static void print_call(timeval const &call, char const *function)
+   {
+      printf
+      (
+         "[%011llu.%06llu][call] %s()\n",
+         (long long unsigned)call.tv_sec,
+         (long long unsigned)call.tv_usec,
+         function
+      );
+   }
+
+   static void print_done(timeval const &call, timeval const &done, char const *function)
+   {
+      long long unsigned diff = 
+         ((long long unsigned)done.tv_sec * 1000000ull + (long long unsigned)done.tv_usec) -
+         ((long long unsigned)call.tv_sec * 1000000ull + (long long unsigned)call.tv_usec);
+
+      printf
+      (
+         "[%011llu.%06llu][done][%llu.%06llu] %s()\n",
+         (long long unsigned)done.tv_sec,
+         (long long unsigned)done.tv_usec,
+         diff / 1000000ull,
+         diff % 1000000ull,
+         function
+      );
+   }
 #endif
 
    template<typename Signature>
@@ -62,6 +109,7 @@ namespace util
    )
    -> ReturnType
    {
+#ifdef USE_CHRONO
       // duration, duration_cast, high_resolution_clock
       using namespace std::chrono;
 
@@ -73,6 +121,13 @@ namespace util
 
       // print the time-stamp
       printf("[%017.6f][call] %s()\n", duration_cast<seconds>(call.time_since_epoch()).count(), function_name);
+#else
+      // record the timestamp before the call
+      auto call(current_time());
+
+      // print the time-stamp
+      print_call(call, function_name);
+#endif
 
       // find the original function
       if(!original)
@@ -93,10 +148,11 @@ namespace util
       // run the original function
       ReturnType result(wrap(original, parameters...));
 
+#ifdef USE_CHRONO
       // record the timestamp after the call
       auto done(high_resolution_clock::now());
 
-      // print the time-stamp
+      // print the time-stamp and duration
       printf
       (
          "[%017.6f][done][%08.6f] %s()\n",
@@ -104,6 +160,13 @@ namespace util
          duration_cast<seconds>(done - call).count(),
          function_name
       );
+#else
+      // record the timestamp after the call
+      auto done(current_time());
+
+      // print the time-stamp and duration
+      print_done(call, done, function_name);
+#endif
 
       // return the actual result
       return result;
@@ -118,6 +181,7 @@ namespace util
       Parameters...parameters
    )
    {
+#ifdef USE_CHRONO
       // duration, duration_cast, high_resolution_clock
       using namespace std::chrono;
 
@@ -129,6 +193,13 @@ namespace util
 
       // print the time-stamp
       printf("[%017.6f][call] %s()\n", duration_cast<seconds>(call.time_since_epoch()).count(), function_name);
+#else
+      // record the timestamp before the call
+      auto call(current_time());
+
+      // print the time-stamp
+      print_call(call, function_name);
+#endif
 
       // find the original function
       if(!original)
@@ -149,10 +220,11 @@ namespace util
       // run the original function
       wrap(original, parameters...);
 
+#ifdef USE_CHRONO
       // record the timestamp after the call
       auto done(high_resolution_clock::now());
 
-      // print the time-stamp
+      // print the time-stamp and duration
       printf
       (
          "[%017.6f][done][%08.6f] %s()\n",
@@ -160,6 +232,13 @@ namespace util
          duration_cast<seconds>(done - call).count(),
          function_name
       );
+#else
+      // record the timestamp after the call
+      auto done(current_time());
+
+      // print the time-stamp and duration
+      print_done(call, done, function_name);
+#endif
    }
 }
 

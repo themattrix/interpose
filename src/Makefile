@@ -2,6 +2,11 @@ ifeq ($(HEADER),)
 $(error No header file specified with "HEADER=...")
 endif
 
+ifeq ($(NO_CHRONO),)
+CHRONO_DEF = -DUSE_CHRONO
+CHRONO_LIB = -lstdc++
+endif
+
 HEADER_DIR  = $(shell dirname "$(HEADER)")
 HEADER_DIR ?= .
 HEADER_BASE = $(shell basename "$(HEADER)" .h)
@@ -20,21 +25,21 @@ SO            = dylib
 INTERPOSE_LIB = $(HEADER_DIR)/libinterpose_$(HEADER_BASE).$(SO)
 INTERPOSE_SRC = $(HEADER_DIR)/interpose_lib_$(HEADER_BASE).cpp
 PRELOAD       = DYLD_LIBRARY_PATH=$(HEADER_DIR) DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=$(INTERPOSE_LIB)
-DEFINES       =
-LIBS          = -ldl -lstdc++
+DEFINES       = $(CHRONO_DEF)
+LIBS          = -ldl $(CHRONO_LIB)
 else
 SHARED        = -shared
 SO            = so
 INTERPOSE_LIB = $(HEADER_DIR)/libinterpose_$(HEADER_BASE).$(SO)
 INTERPOSE_SRC = $(HEADER_DIR)/interpose_lib_$(HEADER_BASE).cpp
 PRELOAD       = LD_LIBRARY_PATH=$(HEADER_DIR) LD_PRELOAD=$(INTERPOSE_LIB)
-DEFINES       = -D_GNU_SOURCE
-LIBS          = -ldl -lstdc++
+DEFINES       = -D_GNU_SOURCE $(CHRONO_DEF)
+LIBS          = -ldl $(CHRONO_LIB)
 endif
 
-TEST_CMD      = $(PRELOAD) test_api/test_app one two three
+TEST_CMD      ?= $(PRELOAD) test_api/test_app one two three
 
-INTERPOSE_CMD = ./interpose.py $(HEADER) $(API_LIB)
+INTERPOSE_CMD ?= ./interpose.py $(HEADER) $(API_LIB)
 
 all: interpose-src test
 
