@@ -28,6 +28,8 @@ namespace util
 #endif
 
 #ifndef USE_CHRONO
+   typedef long long unsigned llu;
+
    static auto current_time() -> timeval
    {
       // store a precise time-stamp
@@ -45,8 +47,8 @@ namespace util
       printf
       (
          "[%011llu.%06llu][call] %s()\n",
-         (long long unsigned)call.tv_sec,
-         (long long unsigned)call.tv_usec,
+         static_cast<llu>(call.tv_sec),
+         static_cast<llu>(call.tv_usec),
          function
       );
    }
@@ -54,14 +56,14 @@ namespace util
    static void print_done(timeval const &call, timeval const &done, char const *function)
    {
       long long unsigned diff = 
-         ((long long unsigned)done.tv_sec * 1000000ull + (long long unsigned)done.tv_usec) -
-         ((long long unsigned)call.tv_sec * 1000000ull + (long long unsigned)call.tv_usec);
+         (static_cast<llu>(done.tv_sec) * 1000000ull + static_cast<llu>(done.tv_usec)) -
+         (static_cast<llu>(call.tv_sec) * 1000000ull + static_cast<llu>(call.tv_usec));
 
       printf
       (
          "[%011llu.%06llu][done][%llu.%06llu] %s()\n",
-         (long long unsigned)done.tv_sec,
-         (long long unsigned)done.tv_usec,
+         static_cast<llu>(done.tv_sec),
+         static_cast<llu>(done.tv_usec),
          diff / 1000000ull,
          diff % 1000000ull,
          function
@@ -83,7 +85,7 @@ namespace util
       void *handle = dlopen(LIB_NAME, RTLD_NOW);
 
       // find the original function within that library
-      return (Signature)dlsym(handle, function);
+      return reinterpret_cast<Signature>(dlsym(handle, function));
 #else
       /** 
        ** Retrieving a pointer to the original function is even easier in linux. It
@@ -94,7 +96,7 @@ namespace util
        **/
 
       // find the original function
-      return (Signature)dlsym(RTLD_NEXT, function);
+      return reinterpret_cast<Signature>(dlsym(RTLD_NEXT, function));
 #endif
    }
 
