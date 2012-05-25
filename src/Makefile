@@ -46,6 +46,9 @@ ifeq ($(UNAME),Darwin)
    DEFINES       = $(CHRONO_DEF)
    LIBS          = -ldl $(CHRONO_LIB)
 else
+   ifeq ($(API_LIB),)
+      API_LIB = ""
+   endif
    SHARED        = -shared
    SO            = so
    INTERPOSE_LIB = $(HEADER_DIR)/libinterpose_$(HEADER_BASE).$(SO)
@@ -57,7 +60,7 @@ endif
 
 TEST_CMD      ?= $(PRELOAD) test_api/test_app one two three
 
-INTERPOSE_CMD ?= ./interpose.py $(HEADER) $(LIB_TEMPLATE) $(USR_TEMPLATE) $(API_LIB)
+INTERPOSE_CMD ?= ./interpose.py $(HEADER) $(API_LIB) lib=$(LIB_TEMPLATE) usr=$(USR_TEMPLATE)
 
 all: interpose-src test
 

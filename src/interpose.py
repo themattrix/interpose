@@ -5,6 +5,7 @@ import subprocess
 import sys
 import os
 
+from os.path import splitext
 from pycparser import c_generator, c_ast
 from textwrap import dedent
 
@@ -20,21 +21,22 @@ class Interpose(object):
        On OS X, use the following variables:
          DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=/path/to/lib.dylib
    """
-   def __init__(self, header, lib_template, usr_template, lib, api):
-      self.lib_template = lib_template
-      self.usr_template = usr_template
-      self.real_header = header
-      self.real_lib = lib
+   def __init__(self, header, lib, templates, api):
+      self.header = header
+      self.lib = lib
       self.api = api
-      header_path, header_base = os.path.split(header)
-      header_base = os.path.splitext(header_base)[0]
-      template_ext = os.path.splitext(os.path.splitext(lib_template)[0])[1]
-      self.generated_lib_path = '{0}/interpose_lib_{1}{2}'.format(header_path or '.', header_base, template_ext)
-      self.generated_usr_path = '{0}/interpose_usr_{1}{2}'.format(header_path or '.', header_base, template_ext)
-      self.generated_lib_code = ''
-      self.generated_usr_code = ''
-      self.wrote = False
-   def extract_label(self, template, label):
+      self.header_path, self.header_base = os.path.split(self.header)
+      self.header_base = splitext(self.header_base)[0]
+      self.templates = {}
+      for t in templates:
+         type, name = t.split('=')
+         ext = splitext(splitext(name)[0])[1]
+         path = 'interpose_{0}_{1}{2}'.format(type, self.header_base, ext)
+         self.templates[type] = name, path
+   def __extract_label(self, template, label):
+      """ Given the template string, "before{{LABEL:contents}}after", and the label, "LABEL", this
+          function would return the tuple ("before", "contents", "after").
+      """
       tag = '{{' + label
       loc = template.find(tag)
       if loc == -1:
@@ -60,60 +62,54 @@ class Interpose(object):
          sys.exit(1)
       # Adjust for the terminating }} being two-characters wide
       return template[:loc], cut[c_pos + 1:], cut[:c_pos - 1]
-   def generate_code(self, template_file):
+   def __generate_code(self, template_file):
+      """ Fills out the provided template with this API. """
       template = ''
       with open(template_file, 'r') as f:
          template = f.read()
-         template = template.replace('{{ORIGINAL_HEADER}}', os.path.split(self.real_header)[1])
-         template = template.replace('{{USER_DEFINED_FUNCTIONS}}', os.path.split(self.generated_usr_path)[1])
-         template = template.replace('{{APPLE_LIB_NAME}}', os.path.split(self.real_lib)[1])
+         template = template.replace('{{ORIGINAL_HEADER}}', os.path.split(self.header)[1])
+         template = template.replace('{{USER_DEFINED_FUNCTIONS}}', self.templates['usr'][1])
+         template = template.replace('{{APPLE_LIB_NAME}}', os.path.split(self.lib)[1])
          while True:
-            template_pre, template_post, label = self.extract_label(template, 'FOR_EACH_FUNCTION')
+            template_pre, template_post, label = self.__extract_label(template, 'FOR_EACH_FUNCTION')
             if not label:
                break
             label = label.strip()
             func_group = ''
             for func in self.api:
+               replacements = (
+                  ('{{NAME}}', func[0]),
+                  ('{{RETURN_TYPE}}', func[1]),
+                  ('{{ARGUMENT_NAMES}}', func[2]),
+                  ('{{ARGUMENT_TYPES}}', func[3]),
+                  ('{{ARGUMENT_LIST}}', func[4]),
+                  ('{{,ARGUMENT_NAMES}}', ', ' + func[2] if func[2] else ''),
+                  ('{{,ARGUMENT_TYPES}}', ', ' + func[3] if func[3] else ''),
+                  ('{{,ARGUMENT_LIST}}', ', ' + func[4] if func[4] else ''))
                func_src = label
-               func_src = func_src.replace('{{NAME}}', func[0])
-               func_src = func_src.replace('{{RETURN_TYPE}}', func[1])
-               func_src = func_src.replace('{{ARGUMENT_NAMES}}', func[2])
-               func_src = func_src.replace('{{ARGUMENT_TYPES}}', func[3])
-               func_src = func_src.replace('{{ARGUMENT_LIST}}', func[4])
-               func_src = func_src.replace('{{,ARGUMENT_NAMES}}', ', ' + func[2] if func[2] else '')
-               func_src = func_src.replace('{{,ARGUMENT_TYPES}}', ', ' + func[3] if func[3] else '')
-               func_src = func_src.replace('{{,ARGUMENT_LIST}}', ', ' + func[4] if func[4] else '')
+               for match, replace in replacements:
+                  func_src = func_src.replace(match, replace)
                while True:
-                  func_src_pre, func_src_post, nonvoid = self.extract_label(func_src, 'IF_NONVOID')
+                  func_src_pre, func_src_post, nonvoid = self.__extract_label(func_src, 'IF_NONVOID')
                   if not nonvoid:
                      break
                   func_src = '{0}{1}{2}'.format(func_src_pre, nonvoid if func[1] != 'void' else '', func_src_post)
                while True:
-                  func_src_pre, func_src_post, void = self.extract_label(func_src, 'IF_VOID')
+                  func_src_pre, func_src_post, void = self.__extract_label(func_src, 'IF_VOID')
                   if not void:
                      break
                   func_src = '{0}{1}{2}'.format(func_src_pre, void if func[1] == 'void' else '', func_src_post)
                func_group += '\n{0}\n'.format(func_src)
             template = '{0}{1}{2}'.format(template_pre, func_group.strip(), template_post)
       return template
-   def generate_lib_code(self):
-      if not self.generated_lib_code:
-         self.generated_lib_code = self.generate_code(self.lib_template)
-      return self.generated_lib_code
-   def generate_usr_code(self):
-      if not self.generated_usr_code:
-         self.generated_usr_code = self.generate_code(self.usr_template)
-      return self.generated_usr_code
    def write(self):
-      if self.wrote:
-         return
-      audit("Writing: {0}".format(self.generated_lib_path))
-      with open(self.generated_lib_path, 'w') as f:
-         f.write(self.generate_lib_code())
-      audit("Writing: {0}".format(self.generated_usr_path))
-      with open(self.generated_usr_path, 'w') as f:
-         f.write(self.generate_usr_code())
-      self.wrote = True
+      """ Write the generated code to their respective files. """
+      for key, value in self.templates.iteritems():
+         template_in, template_out = value
+         path = '{0}/{1}'.format(self.header_path or '.', template_out)
+         audit("Writing: {0}".format(path))
+         with open(path, 'w') as f:
+            f.write(self.__generate_code(template_in))
 
 class ParamListVisitor(c_generator.CGenerator):
    def _generate_type(self, n, modifiers=[]):
@@ -147,7 +143,7 @@ class ParamListVisitor(c_generator.CGenerator):
                nstr += '(' + self.visit(modifier.args) + ')'
             elif isinstance(modifier, c_ast.PtrDecl):
                if modifier.quals:
-                  nstr = '* %s %s' % (' '.join(modifier.quals), nstr)
+                  nstr = '* {0} {1}'.format(' '.join(modifier.quals), nstr)
                else:
                   nstr = '*' + nstr
          if nstr: s += ' ' + nstr
@@ -197,13 +193,10 @@ def parse_header(filename):
 
 def main():
    header = sys.argv[1]
-   lib_template = sys.argv[2]
-   usr_template = sys.argv[3]
-   lib = sys.argv[4] if len(sys.argv) > 4 else ''
-   interpose = Interpose(header, lib_template, usr_template, lib, api = parse_header(header))
+   lib = sys.argv[2]
+   templates = sys.argv[3:]
+   interpose = Interpose(header, lib, templates, api = parse_header(header))
    interpose.write()
-   audit('NOTE: Edit the generated "{0}" file, then run "make interpose-lib HEADER={1}"'
-         ' to build the interposing library'.format(interpose.generated_usr_path, header))
 
 if __name__ == "__main__":
    main()
