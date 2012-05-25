@@ -1,5 +1,6 @@
 ifeq ($(HEADER),)
-   $(error No header file specified with "HEADER=...")
+   HEADER = test_api/test_api.h
+   $(warning No header file specified with "HEADER=...", defaulting to "HEADER=$(HEADER)")
 endif
 
 # Use C++ by default, unless "NO_CPP" is specified
@@ -34,7 +35,8 @@ UNAME := $(shell uname)
 
 ifeq ($(UNAME),Darwin)
    ifeq ($(API_LIB),)
-      $(error No library file specified with "API=LIB=..." (required on OS X))
+      API_LIB = test_api/libtest_api.dylib
+      $(warning No library file specified with "API=LIB=..." (required on OS X), defaulting to "API_LIB=$(API_LIB)")
    endif
    SHARED        = -dynamiclib
    SO            = dylib
@@ -98,7 +100,6 @@ clean-lib:
 	@echo
 	@echo "=======================================================[ Cleaning libraries ]==="
 	rm -f $(INTERPOSE_LIB)
-	rm -f $(TEST_LIB)
 
 clean-src:
 	@echo

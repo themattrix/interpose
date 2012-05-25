@@ -1,3 +1,6 @@
+For a quick demo, run:
+$ make test-demo
+
 Requires:
    C99 compatible compiler
    [for C++ support] C++11 (0x)-compatible compiler
@@ -10,9 +13,6 @@ original library (unlike on Linux).
 
 Note for users of compilers in non-standard locations (like me): You can specify
 'CC' as the path to the C++ compiler.
-
-For a quick demo, run:
-$ make test-demo HEADER=test_api/test_api.h
 
 Otherwise, run:
 $ make interpose-src HEADER='api_header.h'
