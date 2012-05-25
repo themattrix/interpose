@@ -19,10 +19,12 @@ else
    USR_TEMPLATE ?= interpose_usr.c.template
 endif
 
+STD_LIB ?= -lstdc++
+
 # When using C++, use <chrono> by default unless "NO_CHRONO" is specified
 ifeq ($(NO_CHRONO),)
    CHRONO_DEF = -DUSE_CHRONO
-   CHRONO_LIB = -lstdc++
+   CHRONO_LIB = $(STD_LIB)
 endif
 
 HEADER_DIR  = $(shell dirname "$(HEADER)")
