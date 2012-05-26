@@ -76,7 +76,7 @@ auto api_call(Function original, int argc, char **argv) -> int
     
 ...and try it out:
 
-    $ make do-interpose HEADER=test_api/test_api.h APP=test_api/test_app
+    $ make do-interpose HEADER=test_api/test_api.h APP="test_api/test_app one two three"
 
 <pre>
 [1338005593.315879][call] api_call()
