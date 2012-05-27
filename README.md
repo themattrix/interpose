@@ -80,17 +80,17 @@ auto api_call(Function original, int argc, char **argv) -> int
 
 <pre>
 <b>[INTERCEPTED] api_call(4, {test_api/test_app, one, two, three})</b>
-[1338005593.315879][call] api_call()
+[1338087686.971837][call] api_call()
 libtest_api::api_call(int, char **)
-[1338005593.316055][done][0.000176] api_call()
+[1338087686.971861][done][0.000024] api_call()
 result[1] = 4
-[1338005593.316070][call] api_simple()
+[1338087686.971889][call] api_simple()
 libtest_api::api_simple()
-[1338005593.316092][done][0.000022] api_simple()
+[1338087686.971899][done][0.000010] api_simple()
 <b>[INTERCEPTED] api_call(4, {test_api/test_app, one, two, three})</b>
-[1338005593.316099][call] api_call()
+[1338087686.971915][call] api_call()
 libtest_api::api_call(int, char **)
-[1338005593.316114][done][0.000015] api_call()
+[1338087686.971923][done][0.000008] api_call()
 result[2] = 4
 </pre>
 
