@@ -2,23 +2,29 @@
 extern "C" {
 #endif
 
+// include the original header in case any special types are required
 #include "{{ORIGINAL_HEADER}}"
 
 #ifdef __cplusplus
 }
 #endif
 
+// printf()
 #include <cstdio>
+
+// dlsym(), dlopen() [OS X]
 #include <dlfcn.h>
 
+// std::string
+#include <string>
+
 #ifdef USE_CHRONO
+// std::chrono::*
 #include <chrono>
 #else
+// timeval, gettimeofday()
 #include <sys/time.h>
 #endif
-
-// insert the user-defined functions
-#include "{{USER_DEFINED_FUNCTIONS}}"
 
 namespace util
 {
@@ -27,52 +33,8 @@ namespace util
    static const char LIB_NAME[] = "{{APPLE_LIB_NAME}}";
 #endif
 
-#ifndef USE_CHRONO
-   typedef long long unsigned llu;
-
-   static auto current_time() -> timeval
-   {
-      // store a precise time-stamp
-      timeval time;
-
-      // capture the current time
-      gettimeofday(&time, NULL);
-
-      // return the time
-      return time;
-   }
-
-   static void print_call(timeval const &call, char const *function)
-   {
-      printf
-      (
-         "[%011llu.%06llu][call] %s()\n",
-         static_cast<llu>(call.tv_sec),
-         static_cast<llu>(call.tv_usec),
-         function
-      );
-   }
-
-   static void print_done(timeval const &call, timeval const &done, char const *function)
-   {
-      long long unsigned diff = 
-         (static_cast<llu>(done.tv_sec) * 1000000ull + static_cast<llu>(done.tv_usec)) -
-         (static_cast<llu>(call.tv_sec) * 1000000ull + static_cast<llu>(call.tv_usec));
-
-      printf
-      (
-         "[%011llu.%06llu][done][%llu.%06llu] %s()\n",
-         static_cast<llu>(done.tv_sec),
-         static_cast<llu>(done.tv_usec),
-         diff / 1000000ull,
-         diff % 1000000ull,
-         function
-      );
-   }
-#endif
-
    template<typename Signature>
-   static auto get_function(char const *function) -> Signature
+   static auto get_function(std::string const &function) -> Signature
    {
 #ifdef __APPLE__
       /** 
@@ -85,7 +47,7 @@ namespace util
       void *handle = dlopen(LIB_NAME, RTLD_NOW);
 
       // find the original function within that library
-      return reinterpret_cast<Signature>(dlsym(handle, function));
+      return reinterpret_cast<Signature>(dlsym(handle, function.c_str()));
 #else
       /** 
        ** Retrieving a pointer to the original function is even easier in linux. It
@@ -96,165 +58,151 @@ namespace util
        **/
 
       // find the original function
-      return reinterpret_cast<Signature>(dlsym(RTLD_NEXT, function));
+      return reinterpret_cast<Signature>(dlsym(RTLD_NEXT, function.c_str()));
 #endif
    }
 
-   template<typename ReturnType, typename...Parameters>
-   static auto interpose
-   (
-      ReturnType (*wrap)(ReturnType (*)(Parameters...), Parameters...),
-      char const *function_name,
-      ReturnType (*&original)(Parameters...),
-      ReturnType const &default_return,
-      Parameters...parameters
-   )
-   -> ReturnType
+   namespace time
    {
-#ifdef USE_CHRONO
-      // duration, duration_cast, high_resolution_clock
-      using namespace std::chrono;
+#ifndef USE_CHRONO
+      typedef long long unsigned llu;
 
-      // used when outputting the current (or elapsed) time in seconds
-      typedef duration<double> seconds;
-
-      // record the timestamp before the call
-      auto call(high_resolution_clock::now());
-
-      // print the time-stamp
-      printf("[%017.6f][call] %s()\n", duration_cast<seconds>(call.time_since_epoch()).count(), function_name);
-#else
-      // record the timestamp before the call
-      auto call(current_time());
-
-      // print the time-stamp
-      print_call(call, function_name);
-#endif
-
-      // find the original function
-      if(!original)
+      static auto current() -> timeval
       {
-         original = get_function<ReturnType (*)(Parameters...)>(function_name);
+         // store a precise time-stamp
+         timeval time;
 
-         // if the original function is not found...
-         if(!original)
-         {
-            // ...print an error...
-            printf("   >>> ERROR: %s() not found\n", function_name);
+         // capture the current time
+         gettimeofday(&time, NULL);
 
-            // ...and return immediately
-            return default_return;
-         }
+         // return the time
+         return time;
       }
 
-      // run the original function
-      ReturnType result(wrap(original, parameters...));
-
-#ifdef USE_CHRONO
-      // record the timestamp after the call
-      auto done(high_resolution_clock::now());
-
-      // print the time-stamp and duration
-      printf
-      (
-         "[%017.6f][done][%08.6f] %s()\n",
-         duration_cast<seconds>(done.time_since_epoch()).count(),
-         duration_cast<seconds>(done - call).count(),
-         function_name
-      );
-#else
-      // record the timestamp after the call
-      auto done(current_time());
-
-      // print the time-stamp and duration
-      print_done(call, done, function_name);
-#endif
-
-      // return the actual result
-      return result;
-   }
-
-   template<typename...Parameters>
-   static void interpose
-   (
-      void (*wrap)(void (*)(Parameters...), Parameters...),
-      char const *function_name,
-      void (*&original)(Parameters...),
-      Parameters...parameters
-   )
-   {
-#ifdef USE_CHRONO
-      // duration, duration_cast, high_resolution_clock
-      using namespace std::chrono;
-
-      // used when outputting the current (or elapsed) time in seconds
-      typedef duration<double> seconds;
-
-      // record the timestamp before the call
-      auto call(high_resolution_clock::now());
-
-      // print the time-stamp
-      printf("[%017.6f][call] %s()\n", duration_cast<seconds>(call.time_since_epoch()).count(), function_name);
-#else
-      // record the timestamp before the call
-      auto call(current_time());
-
-      // print the time-stamp
-      print_call(call, function_name);
-#endif
-
-      // find the original function
-      if(!original)
+      static void print_call(timeval const &call, std::string const &function)
       {
-         original = get_function<void (*)(Parameters...)>(function_name);
-
-         // if the original function is not found...
-         if(!original)
-         {
-            // ...print an error...
-            printf("   >>> ERROR: %s() not found\n", function_name);
-
-            // ...and return immediately
-            return;
-         }
+         printf
+         (
+            "[%011llu.%06llu][call] %s()\n",
+            static_cast<llu>(call.tv_sec),
+            static_cast<llu>(call.tv_usec),
+            function.c_str()
+         );
       }
 
-      // run the original function
-      wrap(original, parameters...);
+      static void print_done(timeval const &call, timeval const &done, std::string const &function)
+      {
+         long long unsigned diff = 
+            (static_cast<llu>(done.tv_sec) * 1000000ull + static_cast<llu>(done.tv_usec)) -
+            (static_cast<llu>(call.tv_sec) * 1000000ull + static_cast<llu>(call.tv_usec));
+
+         printf
+         (
+            "[%011llu.%06llu][done][%llu.%06llu] %s()\n",
+            static_cast<llu>(done.tv_sec),
+            static_cast<llu>(done.tv_usec),
+            diff / 1000000ull,
+            diff % 1000000ull,
+            function.c_str()
+         );
+      }
+#endif
 
 #ifdef USE_CHRONO
-      // record the timestamp after the call
-      auto done(high_resolution_clock::now());
+      // time_point, duration, duration_cast, high_resolution_clock
+      using namespace std::chrono;
 
-      // print the time-stamp and duration
-      printf
-      (
-         "[%017.6f][done][%08.6f] %s()\n",
-         duration_cast<seconds>(done.time_since_epoch()).count(),
-         duration_cast<seconds>(done - call).count(),
-         function_name
-      );
+      class StampBlock
+      {
+         // used when outputting the current (or elapsed) time in seconds
+         private: typedef duration<double> seconds;
+
+         // timestamp before the call
+         private: high_resolution_clock::time_point call;
+
+         // function name for displaying
+         private: std::string const &name;
+
+         public: StampBlock(std::string const &name)
+            :
+            call(high_resolution_clock::now()),
+            name(name)
+         {
+            // print the time-stamp
+            printf("[%017.6f][call] %s()\n", duration_cast<seconds>(call.time_since_epoch()).count(), name.c_str());
+         }
+
+         public: ~StampBlock()
+         {
+            // record the timestamp after the call
+            auto done(high_resolution_clock::now());
+
+            // print the time-stamp and duration
+            printf
+            (
+               "[%017.6f][done][%08.6f] %s()\n",
+               duration_cast<seconds>(done.time_since_epoch()).count(),
+               duration_cast<seconds>(done - call).count(),
+               name.c_str()
+            );
+         }
+      };
 #else
-      // record the timestamp after the call
-      auto done(current_time());
+      class StampBlock
+      {
+         // timestamp before the call
+         private: timeval call;
 
-      // print the time-stamp and duration
-      print_done(call, done, function_name);
+         // function name for displaying
+         private: std::string const &name;
+
+         public: StampBlock(std::string const &name)
+            :
+            call(time::current()),
+            name(name)
+         {
+            // print the time-stamp
+            time::print_call(call, name);
+         }
+
+         public: ~StampBlock()
+         {
+            // record the timestamp after the call
+            auto done(time::current());
+
+            // print the time-stamp and duration
+            time::print_done(call, done, name);
+         }
+      };
 #endif
+
+      // timestamp the entrance to and exit from a function
+      template<typename Function>
+      auto stamp_call(Function function, std::string const &name) -> decltype(function())
+      {
+         util::time::StampBlock stamp(name);
+         return function();
+      }
    }
 }
+
+// wraps the above function so that the user doesn't have to touch __func__
+#define timestamp(call) util::time::stamp_call([&]{return call;}, __func__)
+
+// insert the user-defined functions
+#include "{{USER_DEFINED_FUNCTIONS}}"
 
 {{FOR_EACH_FUNCTION:
 static auto proxy_{{NAME}}({{ARGUMENT_LIST}}) -> {{RETURN_TYPE}}
 {
-   // points to the original function being interposed
+   // stores the pointer to the original function
    static {{RETURN_TYPE}} (*original)({{ARGUMENT_TYPES}}) = NULL;
-   {{IF_NONVOID:
-   // typedef the return type so that the default constructor can be used for pointer types also
-   typedef {{RETURN_TYPE}} {{NAME}}_return_type;
-   }}
-   // call the generic interposing function to handle the details
-   {{IF_NONVOID:return }}util::interpose(&{{NAME}}, "{{NAME}}", original{{IF_NONVOID:, {{NAME}}_return_type()}}{{,ARGUMENT_NAMES}});
+
+   // attempt to locate the original function if it hasn't already been located
+   if(!original) original = util::get_function<{{RETURN_TYPE}} (*)({{ARGUMENT_TYPES}})>("{{NAME}}");
+
+   // call the user wrapper for this function
+   {{IF_NONVOID:return }}{{NAME}}(original{{,ARGUMENT_NAMES}});
 }
 }}
 

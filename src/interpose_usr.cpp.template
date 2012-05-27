@@ -3,6 +3,6 @@
 template<typename Function>
 auto {{NAME}}(Function original{{,ARGUMENT_LIST}}) -> {{RETURN_TYPE}}
 {
-   {{IF_NONVOID:return }}original({{ARGUMENT_NAMES}});
+   {{IF_NONVOID:return }}timestamp(original({{ARGUMENT_NAMES}}));
 }
 }}
