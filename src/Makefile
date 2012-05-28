@@ -3,25 +3,15 @@ ifeq ($(HEADER),)
    $(warning No header file specified with "HEADER=...", defaulting to "HEADER=$(HEADER)")
 endif
 
-# Use C++ by default, unless "NO_CPP" is specified
-ifeq ($(NO_CPP),)
-   EXT           = cpp
-   CC           ?= g++
-   LANG_STD     ?= c++0x
-   LIB_TEMPLATE ?= interpose_lib.cpp.template
-   USR_TEMPLATE ?= interpose_usr.cpp.template
-else
-   EXT           = c
-   NO_CHRONO     = 1
-   CC           ?= gcc
-   LANG_STD     ?= c99
-   LIB_TEMPLATE ?= interpose_lib.c.template
-   USR_TEMPLATE ?= interpose_usr.c.template
-endif
+EXT           = cpp
+CXX          ?= g++
+LANG_STD     ?= c++0x
+LIB_TEMPLATE ?= interpose_lib.cpp.template
+USR_TEMPLATE ?= interpose_usr.cpp.template
 
 STD_LIB ?= -lstdc++
 
-# When using C++, use <chrono> by default unless "NO_CHRONO" is specified
+# Use <chrono> by default unless "NO_CHRONO" is specified
 ifeq ($(NO_CHRONO),)
    CHRONO_DEF = -DUSE_CHRONO
    CHRONO_LIB = $(STD_LIB)
@@ -77,7 +67,7 @@ interpose-src:
 interpose-lib:
 	@echo
 	@echo "===========================================[ Generating interposing library ]==="
-	$(CC) $(SHARED) $(FLAGS) $(DEFINES) -o $(INTERPOSE_LIB) $(INTERPOSE_SRC) $(LIBS)
+	$(CXX) $(SHARED) $(FLAGS) $(DEFINES) -o $(INTERPOSE_LIB) $(INTERPOSE_SRC) $(LIBS)
 
 do-interpose:
 	@echo
