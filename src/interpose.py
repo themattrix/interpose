@@ -1,20 +1,31 @@
 #!/usr/bin/python
 
-import pycparser
-import subprocess
-import sys
-import os
-
-from os.path import splitext
-from pycparser import c_generator, c_ast
+from os.path import splitext, split
+from pycparser import c_generator, c_ast, parse_file
 from textwrap import dedent
+from sys import argv, exit
+
+class InvalidTemplateException(Exception):
+   """ A template file has been determined to be invalid during parsing. """
+   def __init__(self, msg):
+      self.msg = msg
+   def __str__(self):
+      return self.__repr__()
+   def __repr__(self):
+      return 'Invalid template file: {0}'.format(self.msg)
 
 def audit(message):
    """ Currently just a thin wrapper for print(). """
    print(">>> {0}".format(message))
 
+def group_replace(text, replacements):
+   """ Replaces every occurrence of each item in replacements in the given text. """
+   for match, replace in replacements:
+      text = text.replace(match, replace)
+   return text
+
 class Interpose(object):
-   """ Generate and write out C code for interposing API calls. The resulting library code can be
+   """ Generate and write out code for interposing API calls. The resulting library code can be
        used to intercept API calls for the specified function signatures if it is loaded before
        the original library. On linux, this is achieved with the following variable:
          LD_PRELOAD=/path/to/lib.so
@@ -25,7 +36,7 @@ class Interpose(object):
       self.header = header
       self.lib = lib
       self.api = api
-      self.header_path, self.header_base = os.path.split(self.header)
+      self.header_path, self.header_base = split(self.header)
       self.header_base = splitext(self.header_base)[0]
       self.templates = {}
       for t in templates:
@@ -35,7 +46,7 @@ class Interpose(object):
          self.templates[type] = name, path
    def __extract_label(self, template, label):
       """ Given the template string, "before{{LABEL:contents}}after", and the label, "LABEL", this
-          function would return the tuple ("before", "contents", "after").
+          function would return the tuple ("before", "after", "contents").
       """
       tag = '{{' + label
       loc = template.find(tag)
@@ -43,7 +54,10 @@ class Interpose(object):
          return template, '', ''
       col = template.find(':', loc + len(tag))
       if col == -1:
-         return template, '', ''
+         end = template.find('}}')
+         if end == -1:
+            raise InvalidTemplateException("non-terminating '{0}' label".format(label))
+         return template[:loc], '', ''
       cut = template[col + 1:]
       stack = 2
       c_pos = 0
@@ -58,47 +72,46 @@ class Interpose(object):
                break
          c_pos += 1
       if not found:
-         audit("ERROR: Non-terminating '{0}' tag".format(label))
-         sys.exit(1)
-      # Adjust for the terminating }} being two-characters wide
+         raise InvalidTemplateException("non-terminating '{0}' label".format(label))
+      # Adjust for the terminating }} being two characters wide
       return template[:loc], cut[c_pos + 1:], cut[:c_pos - 1]
+   def __replace_conditional(self, text, condition, truth):
+      while True:
+         pre, post, extract = self.__extract_label(text, 'IF_' + condition)
+         if not extract:
+            break
+         text = '{0}{1}{2}'.format(pre, extract if truth else '', post)
+      return text
    def __generate_code(self, template_file):
       """ Fills out the provided template with this API. """
       template = ''
       with open(template_file, 'r') as f:
-         template = f.read()
-         template = template.replace('{{ORIGINAL_HEADER}}', os.path.split(self.header)[1])
-         template = template.replace('{{USER_DEFINED_FUNCTIONS}}', self.templates['usr'][1])
-         template = template.replace('{{APPLE_LIB_NAME}}', os.path.split(self.lib)[1])
+         template = group_replace(
+            f.read(),
+            (('{{ORIGINAL_HEADER}}', split(self.header)[1]),
+             ('{{USER_DEFINED_FUNCTIONS}}', self.templates['usr'][1]),
+             ('{{APPLE_LIB_NAME}}', split(self.lib)[1])))
+         # Loop until we've filled all 'FOR_EACH_FUNCTION' templates
          while True:
             template_pre, template_post, label = self.__extract_label(template, 'FOR_EACH_FUNCTION')
             if not label:
                break
             label = label.strip()
             func_group = ''
-            for func in self.api:
-               replacements = (
-                  ('{{NAME}}', func[0]),
-                  ('{{RETURN_TYPE}}', func[1]),
-                  ('{{ARGUMENT_NAMES}}', func[2]),
-                  ('{{ARGUMENT_TYPES}}', func[3]),
-                  ('{{ARGUMENT_LIST}}', func[4]),
-                  ('{{,ARGUMENT_NAMES}}', ', ' + func[2] if func[2] else ''),
-                  ('{{,ARGUMENT_TYPES}}', ', ' + func[3] if func[3] else ''),
-                  ('{{,ARGUMENT_LIST}}', ', ' + func[4] if func[4] else ''))
+            for name, return_type, arg_names, arg_types, arg_list in self.api:
                func_src = label
-               for match, replace in replacements:
-                  func_src = func_src.replace(match, replace)
-               while True:
-                  func_src_pre, func_src_post, nonvoid = self.__extract_label(func_src, 'IF_NONVOID')
-                  if not nonvoid:
-                     break
-                  func_src = '{0}{1}{2}'.format(func_src_pre, nonvoid if func[1] != 'void' else '', func_src_post)
-               while True:
-                  func_src_pre, func_src_post, void = self.__extract_label(func_src, 'IF_VOID')
-                  if not void:
-                     break
-                  func_src = '{0}{1}{2}'.format(func_src_pre, void if func[1] == 'void' else '', func_src_post)
+               func_src = self.__replace_conditional(func_src, 'NONVOID', return_type != 'void')
+               func_src = self.__replace_conditional(func_src, 'VOID', return_type == 'void')
+               func_src = group_replace(
+                  func_src,
+                  (('{{NAME}}', name),
+                   ('{{RETURN_TYPE}}', return_type),
+                   ('{{ARGUMENT_NAMES}}', arg_names),
+                   ('{{ARGUMENT_TYPES}}', arg_types),
+                   ('{{ARGUMENT_LIST}}',  arg_list),
+                   ('{{,ARGUMENT_NAMES}}', ', ' + arg_names if arg_names else ''),
+                   ('{{,ARGUMENT_TYPES}}', ', ' + arg_types if arg_types else ''),
+                   ('{{,ARGUMENT_LIST}}',  ', ' + arg_list  if arg_list  else '')))
                func_group += '\n{0}\n'.format(func_src)
             template = '{0}{1}{2}'.format(template_pre, func_group.strip(), template_post)
       return template
@@ -187,16 +200,20 @@ class FuncDeclVisitor(c_ast.NodeVisitor):
 
 def parse_header(filename):
    visitor = FuncDeclVisitor()
-   ast = pycparser.parse_file(filename, use_cpp = True)
+   ast = parse_file(filename, use_cpp = True)
    visitor.visit(ast)
    return visitor.functions
 
-def main():
-   header = sys.argv[1]
-   lib = sys.argv[2]
-   templates = sys.argv[3:]
-   interpose = Interpose(header, lib, templates, api = parse_header(header))
-   interpose.write()
+def main(args):
+   try:
+      header, lib, templates = args[1], args[2], args[3:]
+      interpose = Interpose(header, lib, templates, api = parse_header(header))
+      interpose.write()
+   except InvalidTemplateException as e:
+      audit('[ERROR] {0}'.format(e))
+      return 1
+   else:
+      return 0
 
 if __name__ == "__main__":
-   main()
+   exit(main(argv))
