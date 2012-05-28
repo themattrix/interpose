@@ -5,7 +5,7 @@ This program will generate the code for _interposing_ (intercepting) library cal
 
 For a quick demo, run:
     
-    $ make test-demo
+    $ make demo
 
 Files `test_api/interpose_lib_test_api.cpp` (the 'lib' file) and `test_api/interpose_usr_test_api.cpp` (the 'usr' file) will be generated then compiled into the shared library `libinterpose_test_api.so` (`.dylib` on OS X).
 
@@ -72,11 +72,11 @@ auto api_call(Function original, int argc, char **argv) -> int
 ```
 ...then we'll build the new interposing library:
     
-    $ make interpose-lib HEADER=test_api/test_api.h
+    $ make interpose-lib HEADER=test/test_api.h
     
 ...and try it out:
 
-    $ make do-interpose HEADER=test_api/test_api.h APP="test_api/test_app one two three"
+    $ make do-interpose HEADER=test/test_api.h APP="test/test_app one two three"
 
 <pre>
 <b>[INTERCEPTED] api_call(4, {test_api/test_app, one, two, three})</b>
@@ -96,18 +96,16 @@ result[2] = 4
 
 Requirements
 ------------
-
-Requires:
-- C99 compatible compiler
-- [for C++ support] C++11 (0x)-compatible compiler
-- Python 2.7 and pycparser (available in PIP)
+- Python 2.6 and [pycparser](http://code.google.com/p/pycparser/) (also [available in pip](http://pypi.python.org/pypi/pip)) for generating the interposing code
+- C++11-compatible compiler for compiling the interposing code
+- C99-compatible compiler for compiling the demo
 - Linux or OS X
 
 Notes
 -----
 
-By default, interposing C++ code is generated and the time-stamps are calculated with `<chrono>`. To drop `<chrono>` and fall back to `<sys/time.h>`, specify the `NO_CHRONO=1` flag. Doing this avoids a dependency on libstdc++. To fall back to C instead of C++, specify the `NO_CPP=1` flag (which implies `NO_CHRONO`). I don't recommend this; the code is gross.
+By default, the time-stamps are calculated with `<chrono>`. To drop `<chrono>` and fall back to `<sys/time.h>`, specify the `NO_CHRONO=1` flag. Doing this avoids a dependency on libstdc++.
 
 For OS X users: In addition to specifying `HEADER`, you must also specify `API_LIB` because the method for finding the original library call requires the original library (unlike on Linux).
 
-For users of compilers in non-standard locations: You can specify `CC` as the path to the C++ compiler.
+For users of compilers in non-standard locations: You can specify `CXX` as the path to the C++ compiler.
