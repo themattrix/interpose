@@ -1,5 +1,5 @@
 ifeq ($(HEADER),)
-   HEADER = test_api/test_api.h
+   HEADER = test/test_api.h
    $(warning No header file specified with "HEADER=...", defaulting to "HEADER=$(HEADER)")
 endif
 
@@ -37,7 +37,7 @@ UNAME := $(shell uname)
 
 ifeq ($(UNAME),Darwin)
    ifeq ($(API_LIB),)
-      API_LIB = test_api/libtest_api.dylib
+      API_LIB = test/libtest_api.dylib
       $(warning No library file specified with "API=LIB=..." (required on OS X), defaulting to "API_LIB=$(API_LIB)")
    endif
    SHARED        = -dynamiclib
@@ -60,7 +60,7 @@ else
    LIBS          = -ldl $(CHRONO_LIB)
 endif
 
-TEST_CMD      ?= $(PRELOAD) test_api/test_app one two three
+TEST_CMD      ?= $(PRELOAD) test/test_app one two three
 
 INTERPOSE_CMD ?= ./interpose.py $(HEADER) $(API_LIB) lib=$(LIB_TEMPLATE) usr=$(USR_TEMPLATE)
 
@@ -87,7 +87,7 @@ do-interpose:
 test:
 	@echo
 	@echo "====================================================[ Building the test API ]==="
-	make -C test_api
+	make -C test
 	@echo
 	@echo "=============================================================[ Running test ]==="
 	@echo $(TEST_CMD)
@@ -95,11 +95,7 @@ test:
 	@echo "===[ Results ]:"
 	@$(TEST_CMD) 2>&1 | sed 's/^/   /'
 
-test-demo: interpose-src interpose-lib test
-
-clean: clean-lib
-
-clean-all: clean-lib clean-src clean-test
+demo: interpose-src interpose-lib test
 
 clean-lib:
 	@echo
@@ -113,4 +109,10 @@ clean-src:
 	rm -f $(HEADER_DIR)/interpose_usr_$(HEADER_BASE).$(EXT)
 
 clean-test:
-	make -C test_api clean
+	make -C test clean
+
+clean-all: clean-lib clean-src clean-test
+
+clean: clean-lib
+
+.PHONY: test
