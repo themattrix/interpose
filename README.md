@@ -30,22 +30,57 @@ _Without_ the interposing library loaded, the application output contains just t
 5 + 456 + 23 + 99 + 0 + -100 = 483
 </pre>
 
-Let's look at the `extract_int_args()` function declaration in `test/int_args.h`:
+The demo library being intercepted has the following public interface (`test/int_args.h`):
 ```C
+/** Allocate an integer array equal in size to argc and fill it with integer
+ ** representations of of the supplied command-line arguments.
+ **/
 int extract_int_args(int argc, char *argv[], int **args);
+
+/** Return the sum of all integers in 'args'. 
+ **/
+int add_int_args(int argc, int *args);
+
+/** Joins all of the integers in 'args' with 'delim'. For example, if delim is
+ ** " + " and args is (9, 3, 6), the result would be "9 + 3 + 6". The result is
+ ** appended to 'out'.
+ **/
+void join_int_args(char *out, int len, int argc, int *args, const char *delim);
+
+/** Frees 'args' and sets it to NULL.
+ **/
+void release_int_args(int **args);
 ```
 
-By default, the following C++11 code will be generated as part of the 'usr' file for `extract_int_args()`:
+A block of C++11 code is generated as the 'usr' file for the above interface. These are the so-called _user-defined functions_:
 ```C++
 template<typename Function>
 auto extract_int_args(Function original, int argc, char *argv[], int **args) -> int
 {
    return timestamp(original(argc, argv, args));
 }
+
+template<typename Function>
+auto add_int_args(Function original, int argc, int *args) -> int
+{
+   return timestamp(original(argc, args));
+}
+
+template<typename Function>
+void join_int_args(Function original, char *out, int len, int argc, int *args, const char *delim)
+{
+   timestamp(original(out, len, argc, args, delim));
+}
+
+template<typename Function>
+void release_int_args(Function original, int **args)
+{
+   timestamp(original(args));
+}
 ```
 _The function `timestamp()` is syntactic sugar defined in the generated 'lib' file. It timestamps the supplied function before and after it's called._
 
-The goal is to make the 'usr' file as simple as possible by abstracting all of the dirty work into the 'lib' file. The original function is located and sent as the first argument into the wrapper function. If you want to do something special, this function is the place to do it. Possibilities include printing the arguments, modifying the arguments, returning an unexpected value, delaying, _not_ printing time-stamps, etc.
+The goal is to make the 'usr' file as simple as possible by abstracting all of the dirty work into the 'lib' file. The original function is located and sent as the first argument into the wrapper function. If you want to do something special, this function is the place to make it happen. Possibilities include printing the arguments, modifying the arguments, returning an unexpected value, delaying, _not_ printing time-stamps, etc.
 
 For example, let's add some code to print the arguments to `extract_int_args()`:
 ```C++
@@ -75,7 +110,7 @@ auto extract_int_args(Function original, int argc, char *argv[], int **args) -> 
 ```bash
 $ make interpose-lib HEADER=test/int_args.h
 ```
-    
+
 ...and try it out:
 ```bash
 $ make do-interpose HEADER=test/int_args.h APP="test/app 5 456 23 99 0 -100"
@@ -94,6 +129,16 @@ $ make do-interpose HEADER=test/int_args.h APP="test/app 5 456 23 99 0 -100"
 5 + 456 + 23 + 99 + 0 + -100 = 483
 </pre>
 
+### Error checking
+
+The `original` function pointer is checked against `NULL` before each call to the user-defined function. If it is `NULL` (like on the first call to that function), then the original function is queried and saved. _Whether the query returned a valid pointer **or not**_, the user function _will be called_. This is important.
+    
+    It is entirely up to the user-defined function to provide error handling for an invalid original function.
+
+If the original function was not located and no action was taken in the user function, the program will probably segfault. In most cases, that's probably what you want as it may indicate an error in the environment.
+
+Why not print an error message and exit, or call some user-specified handler for such an error? Consider the case where the user function has been modified to never call the original function; it wouldn't _matter_ if the original were invalid. Verification is left to the user functions for this reason.
+
 Requirements
 ------------
 - Python 2.6 and [pycparser](http://code.google.com/p/pycparser/) (also [available in pip](http://pypi.python.org/pypi/pip)) for generating the interposing code
@@ -108,4 +153,4 @@ By default, the time-stamps are calculated with `<chrono>`. To drop `<chrono>` a
 
 For OS X users: In addition to specifying `HEADER`, you must also specify `API_LIB` because the method for finding the original library call requires the original library (unlike on Linux).
 
-For users of compilers in non-standard locations: You can specify `CXX` as the path to the C++ compiler.
+For users of compilers in non-standard locations: You can specify `CXX` as the path to the C++ compiler and `CC` as the path to the C compiler.
