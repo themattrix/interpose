@@ -83,7 +83,7 @@ namespace util
       {
          printf
          (
-            "[%011llu.%06llu][call] %s()\n",
+            "[%011llu.%06llu][call].......... %s()\n",
             static_cast<llu>(call.tv_sec),
             static_cast<llu>(call.tv_usec),
             function.c_str()
@@ -129,7 +129,12 @@ namespace util
             name(name)
          {
             // print the time-stamp
-            printf("[%017.6f][call] %s()\n", duration_cast<seconds>(call.time_since_epoch()).count(), name.c_str());
+            printf
+            (
+               "[%017.6f][call].......... %s()\n",
+               duration_cast<seconds>(call.time_since_epoch()).count(),
+               name.c_str()
+            );
          }
 
          public: ~StampBlock()

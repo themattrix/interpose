@@ -1,5 +1,5 @@
 ifeq ($(HEADER),)
-   HEADER = test/test_api.h
+   HEADER = test/int_args.h
    $(warning No header file specified with "HEADER=...", defaulting to "HEADER=$(HEADER)")
 endif
 
@@ -27,7 +27,7 @@ UNAME := $(shell uname)
 
 ifeq ($(UNAME),Darwin)
    ifeq ($(API_LIB),)
-      API_LIB = test/libtest_api.dylib
+      API_LIB = test/libint_args.dylib
       $(warning No library file specified with "API=LIB=..." (required on OS X), defaulting to "API_LIB=$(API_LIB)")
    endif
    SHARED        = -dynamiclib
@@ -50,7 +50,9 @@ else
    LIBS          = -ldl $(CHRONO_LIB)
 endif
 
-TEST_CMD      ?= $(PRELOAD) test/test_app one two three
+APP           ?= test/app 5 456 23 99 0 -100
+
+TEST_CMD      ?= $(PRELOAD) $(APP)
 
 INTERPOSE_CMD ?= ./interpose.py $(HEADER) $(API_LIB) lib=$(LIB_TEMPLATE) usr=$(USR_TEMPLATE)
 

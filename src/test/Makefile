@@ -3,31 +3,33 @@ FLAGS = -fPIC -Wall -Werror -std=c99
 UNAME := $(shell uname)
 
 ifeq ($(UNAME),Darwin)
-SHARED = -dynamiclib
-SO = dylib
-LIB_NAME = libtest_api.$(SO)
-LIBS = $(LIB_NAME)
+   SHARED = -dynamiclib
+   SO = dylib
+   LIB_NAME = libint_args.$(SO)
+   LIBS = $(LIB_NAME)
 else
-SHARED = -shared
-SO = so
-LIB_NAME = libtest_api.$(SO)
-LIBS = -L. -ltest_api
+   SHARED = -shared
+   SO = so
+   LIB_NAME = libint_args.$(SO)
+   LIBS = -L. -lint_args
 endif
 
-all: test-app
+all: app
 
-test-api:
+lib-int-args:
 	@echo
-	@echo "===================================================[ Compiling 'test_api.c' ]==="
-	gcc $(SHARED) $(FLAGS) -o $(LIB_NAME) test_api.c
+	@echo "===================================================[ Compiling 'int_args.c' ]==="
+	$(CC) $(SHARED) $(FLAGS) -o $(LIB_NAME) int_args.c
 
-test-app: test-api
+app: lib-int-args
 	@echo
-	@echo "===================================================[ Compiling 'test_app.c' ]==="
-	gcc $(FLAGS) -o test_app test_app.c $(LIBS)
+	@echo "========================================================[ Compiling 'app.c' ]==="
+	$(CC) $(FLAGS) -o app app.c $(LIBS)
 
 clean:
 	@echo
-	@echo "========================================================[ Cleaning test_api ]==="
+	@echo "====================================================[ Cleaning the test API ]==="
 	rm -f $(LIB_NAME)
-	rm -f test_app
+	rm -f app
+
+.PHONY: app
