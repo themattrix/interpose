@@ -1,35 +1,35 @@
-CC = gcc
-FLAGS = -fPIC -Wall -Werror -std=c99
+CC     = gcc
+FLAGS  = -fPIC -Wall -Werror -std=c99
 UNAME := $(shell uname)
 
 ifeq ($(UNAME),Darwin)
-   SHARED = -dynamiclib
-   SO = dylib
+   SHARED   = -dynamiclib
+   SO       = dylib
    LIB_NAME = libint_args.$(SO)
-   LIBS = $(LIB_NAME)
+   LIBS     = $(LIB_NAME)
 else
-   SHARED = -shared
-   SO = so
+   SHARED   = -shared
+   SO       = so
    LIB_NAME = libint_args.$(SO)
-   LIBS = -L. -lint_args
+   LIBS     = -L. -lint_args
 endif
 
-all: app
+all: add
 
 lib-int-args:
 	@echo
 	@echo "===================================================[ Compiling 'int_args.c' ]==="
 	$(CC) $(SHARED) $(FLAGS) -o $(LIB_NAME) int_args.c
 
-app: lib-int-args
+add: lib-int-args
 	@echo
 	@echo "========================================================[ Compiling 'app.c' ]==="
-	$(CC) $(FLAGS) -o app app.c $(LIBS)
+	$(CC) $(FLAGS) -o add add.c $(LIBS)
 
 clean:
 	@echo
 	@echo "====================================================[ Cleaning the test API ]==="
 	rm -f $(LIB_NAME)
-	rm -f app
+	rm -f add
 
-.PHONY: app
+.PHONY: lib-int-args add clean

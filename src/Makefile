@@ -50,7 +50,7 @@ else
    LIBS          = -ldl $(CHRONO_LIB)
 endif
 
-APP           ?= test/app 5 456 23 99 0 -100
+APP           ?= test/add 5 456 23 99 0 -100
 
 TEST_CMD      ?= $(PRELOAD) $(APP)
 

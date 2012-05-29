@@ -27,18 +27,29 @@ int add_int_args(int argc, int *args)
    return sum;
 }
 
-void join_int_args(char *out, int argc, int *args, const char *delim)
+void join_int_args(char *out, int len, int argc, int *args, const char *delim)
 {
    int offset = 0;
+   int result = 0;
 
    for(int i = 0; i < argc; ++i)
    {
       if(i)
       {
-         offset += sprintf(out + offset, "%s", delim);
+         if((result = snprintf(out + offset, len - offset, "%s", delim)) >= len - offset)
+         {
+            return;
+         }
+
+         offset += result;
       }
 
-      offset += sprintf(out + offset, "%d", args[i]);
+      if((result = snprintf(out + offset, len - offset, "%d", args[i])) >= len - offset)
+      {
+         return;
+      }
+
+      offset += result;
    }
 }
 

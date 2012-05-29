@@ -12,7 +12,7 @@ int main(int argc, char *argv[])
 
    if(argc == 0)
    {
-      printf("Error: no argument specified; exiting\n");
+      printf("Error: no argument(s) specified; exiting\n");
       return 1;
    }
 
@@ -22,13 +22,13 @@ int main(int argc, char *argv[])
    {
       int sum = add_int_args(argc, args);
 
-      char pretty_args[512] = {0};
+      char pretty[512] = {0};
 
-      join_int_args(pretty_args, argc, args, " + ");
+      join_int_args(pretty, sizeof(pretty), argc, args, " + ");
 
       release_int_args(&args);
 
-      printf("%s = %d\n", pretty_args, sum);
+      printf("%s = %d\n", pretty, sum);
    }
 
    return 0;
