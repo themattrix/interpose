@@ -142,7 +142,7 @@ Why not print an error message and exit, or call some user-specified handler for
 Requirements
 ------------
 - Python 2.6 and [pycparser](http://code.google.com/p/pycparser/) (also [available in pip](http://pypi.python.org/pypi/pip)) for generating the interposing code
-- C++11-compatible compiler for compiling the interposing code
+- C++11-compatible compiler for compiling the interposing code (I've tested GCC 4.6.3, 4.7, and Clang 3.1)
 - C99-compatible compiler for compiling the demo
 - Linux or OS X
 
