@@ -4,94 +4,94 @@ Interpose
 This program will generate the code for _interposing_ (intercepting) library calls based upon a given C header file.
 
 For a quick demo, run:
-    
-    $ make demo
+```bash
+$ make demo
+```
 
-Files `test_api/interpose_lib_test_api.cpp` (the 'lib' file) and `test_api/interpose_usr_test_api.cpp` (the 'usr' file) will be generated then compiled into the shared library `libinterpose_test_api.so` (`.dylib` on OS X).
+In this demo, the files `test/interpose_lib_int_args.cpp` (the 'lib' file) and `test/interpose_usr_int_args.cpp` (the 'usr' file) will be generated then compiled into the shared library `libinterpose_int_args.so` (`.dylib` on OS X).
 
 The output should contain something like:
 <pre>
-<b>[1337999139.711980][call] api_call()</b>
-libtest_api::api_call(int, char **)
-<b>[1337999139.712053][done][0.000073] api_call()</b>
-result[1] = 4
-<b>[1337999139.712060][call] api_simple()</b>
-libtest_api::api_simple()
-<b>[1337999139.712074][done][0.000014] api_simple()</b>
-<b>[1337999139.712078][call] api_call()</b>
-libtest_api::api_call(int, char **)
-<b>[1337999139.712080][done][0.000002] api_call()</b>
-result[2] = 4
+[1338250882.859208][call].......... extract_int_args()
+[1338250882.859327][done][0.000119] extract_int_args()
+[1338250882.859373][call].......... add_int_args()
+[1338250882.859380][done][0.000007] add_int_args()
+[1338250882.859412][call].......... join_int_args()
+[1338250882.859430][done][0.000018] join_int_args()
+[1338250882.859457][call].......... release_int_args()
+[1338250882.859462][done][0.000005] release_int_args()
+5 + 456 + 23 + 99 + 0 + -100 = 483
 </pre>
 
 What's happening here? All calls to this test library were interposed by our custom library. In this simple example the API calls are timestamped. All `[call]` and `[done]` lines contain a precise seconds-since-epoc timestamp plus the name of the function being called. `[done]` lines also contain a duration (in seconds) for that call.
 
-_Without_ the interposing library loaded, the application output looks like this:
+_Without_ the interposing library loaded, the application output contains just the final line:
+<pre>
+5 + 456 + 23 + 99 + 0 + -100 = 483
+</pre>
 
-    libtest_api::api_call(int, char **)
-    result[1] = 4
-    libtest_api::api_simple()
-    libtest_api::api_call(int, char **)
-    result[2] = 4
-
-Let's look at the `api_call()` function declaration:
+Let's look at the `extract_int_args()` function declaration in `test/int_args.h`:
 ```C
-int api_call(int argc, char **argv);
+int extract_int_args(int argc, char *argv[], int **args);
 ```
 
-By default, the following C++11 code will be generated as part of the 'usr' file for `api_call()`:
+By default, the following C++11 code will be generated as part of the 'usr' file for `extract_int_args()`:
 ```C++
 template<typename Function>
-auto api_call(Function original, int argc, char **argv) -> int
+auto extract_int_args(Function original, int argc, char *argv[], int **args) -> int
 {
-   return timestamp(original(argc, argv));
+   return timestamp(original(argc, argv, args));
 }
 ```
+_The function `timestamp()` is syntactic sugar defined in the generated 'lib' file. It timestamps the supplied function before and after it's called._
 
 The goal is to make the 'usr' file as simple as possible by abstracting all of the dirty work into the 'lib' file. The original function is located and sent as the first argument into the wrapper function. If you want to do something special, this function is the place to do it. Possibilities include printing the arguments, modifying the arguments, returning an unexpected value, delaying, _not_ printing time-stamps, etc.
 
-For example, let's add some code to print the arguments to `api_call()`:
+For example, let's add some code to print the arguments to `extract_int_args()`:
 ```C++
 #include <iostream>
 #include <sstream>
 
 template<typename Function>
-auto api_call(Function original, int argc, char **argv) -> int
+auto extract_int_args(Function original, int argc, char *argv[], int **args) -> int
 {
    typedef std::ostringstream oss;
 
    std::cout
-      << "[INTERCEPTED] api_call("
+      << "[INTERCEPTED] "
+      << __func__
+      << '('
       << argc
       << ", {"
       << [&]{oss o; for(int i{}; i < argc; ++i){if(i) o << ", "; o << argv[i];} return o.str();}()
-      << "})\n";
+      << "}, "
+      << static_cast<void *>(args)
+      << ")\n";
 
-   return timestamp(original(argc, argv));
+   return timestamp(original(argc, argv, args));
 }
 ```
 ...then we'll build the new interposing library:
-    
-    $ make interpose-lib HEADER=test/test_api.h
+```bash
+$ make interpose-lib HEADER=test/int_args.h
+```
     
 ...and try it out:
-
-    $ make do-interpose HEADER=test/test_api.h APP="test/test_app one two three"
+```bash
+$ make do-interpose HEADER=test/int_args.h APP="test/app 5 456 23 99 0 -100"
+```
 
 <pre>
-<b>[INTERCEPTED] api_call(4, {test_api/test_app, one, two, three})</b>
-[1338087686.971837][call] api_call()
-libtest_api::api_call(int, char **)
-[1338087686.971861][done][0.000024] api_call()
-result[1] = 4
-[1338087686.971889][call] api_simple()
-libtest_api::api_simple()
-[1338087686.971899][done][0.000010] api_simple()
-<b>[INTERCEPTED] api_call(4, {test_api/test_app, one, two, three})</b>
-[1338087686.971915][call] api_call()
-libtest_api::api_call(int, char **)
-[1338087686.971923][done][0.000008] api_call()
-result[2] = 4
+<b>[INTERCEPTED] extract_int_args(6, {5, 456, 23, 99, 0, -100}, 0x7fff5fbff5e0)</b>
+[1338251018.159458][call].......... extract_int_args()
+[1338251018.159486][done][0.000028] extract_int_args()
+[1338251018.159511][call].......... add_int_args()
+[1338251018.159518][done][0.000007] add_int_args()
+[1338251018.159539][call].......... join_int_args()
+[1338251018.159553][done][0.000014] join_int_args()
+[1338251018.159572][call].......... release_int_args()
+[1338251018.159581][done][0.000009] release_int_args()
+5 + 456 + 23 + 99 + 0 + -100 = 483
 </pre>
 
 Requirements
