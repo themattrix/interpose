@@ -1,12 +1,12 @@
 Interpose
 =========
 
-This program will generate the code for _interposing_ (intercepting) library calls based upon a given C header file.
+This application will generate the code for _interposing_ (intercepting) library calls based upon a given C header file.
 
 For a quick demo, run:
-```bash
+<pre>
 $ make demo
-```
+</pre>
 
 In this demo, the files `test/interpose_lib_int_args.cpp` (the 'lib' file) and `test/interpose_usr_int_args.cpp` (the 'usr' file) will be generated then compiled into the shared library `libinterpose_int_args.so` (`.dylib` on OS X).
 
@@ -23,14 +23,17 @@ The output should contain something like:
 5 + 456 + 23 + 99 + 0 + -100 = 483
 </pre>
 
-What's happening here? All calls to this test library were interposed by our custom library. In this simple example the API calls are timestamped. All `[call]` and `[done]` lines contain a precise seconds-since-epoc timestamp plus the name of the function being called. `[done]` lines also contain a duration (in seconds) for that call.
+What's happening here? All calls to this test library were interposed by our custom library. In this simple example the API calls are timestamped. All `[call]` and `[done]` lines contain a precise seconds&ndash;since&ndash;epoc timestamp plus the name of the function being called. `[done]` lines also contain a duration (in seconds) for that call.
 
 _Without_ the interposing library loaded, the application output contains just the final line:
 <pre>
 5 + 456 + 23 + 99 + 0 + -100 = 483
 </pre>
 
-The demo application&mdash;which produces the above output&mdash;is pretty simple (`test/add.c`):
+The demo application&mdash;which produces the above output&mdash;is pretty simple:
+<pre>
+$ cat test/add.c
+</pre>
 ```C
 /* printf() */
 #include <stdio.h>
@@ -68,7 +71,10 @@ int main(int argc, char *argv[])
 }
 ```
 
-It excercises the following public interface (`test/int_args.h`):
+It exercises the following public interface:
+<pre>
+$ cat test/int_args.h
+</pre>
 ```C
 /** Allocate an integer array equal in size to argc and fill it with integer
  ** representations of of the supplied command-line arguments.
@@ -90,7 +96,10 @@ void join_int_args(char *out, int len, int argc, int *args, const char *delim);
 void release_int_args(int **args);
 ```
 
-A block of C++11 code is generated as the 'usr' file for the above interface. These are the so-called _user-defined functions_:
+A block of C++11 code is generated as the 'usr' file for the above interface. These are the so&ndash;called _user-defined functions_:
+<pre>
+$ cat test/interpose_usr_int_args.cpp
+</pre>
 ```C++
 template<typename Function>
 auto extract_int_args(Function original, int argc, char *argv[], int **args) -> int
@@ -116,7 +125,7 @@ void release_int_args(Function original, int **args)
    timestamp(original(args));
 }
 ```
-_The function `timestamp()` is syntactic sugar defined in the generated 'lib' file. It timestamps the supplied function before and after it's called._
+_The `timestamp()` function is syntactic sugar defined in the generated 'lib' file. It timestamps the supplied function before and after it's called._
 
 The goal is to make the 'usr' file as simple as possible by abstracting all of the dirty work into the 'lib' file. The original function is located and sent as the first argument into the wrapper function. If you want to do something special, this function is the place to make it happen. Possibilities include printing the arguments, modifying the arguments, returning an unexpected value, delaying, _not_ printing time-stamps, etc.
 
@@ -145,14 +154,14 @@ auto extract_int_args(Function original, int argc, char *argv[], int **args) -> 
 }
 ```
 ...then we'll build the new interposing library:
-```bash
+<pre>
 $ make interpose-lib HEADER=test/int_args.h
-```
+</pre>
 
 ...and try it out:
-```bash
+<pre>
 $ make do-interpose HEADER=test/int_args.h APP="test/app 5 456 23 99 0 -100"
-```
+</pre>
 
 <pre>
 <b>[INTERCEPTED] extract_int_args(6, {5, 456, 23, 99, 0, -100}, 0x7fff5fbff5e0)</b>
@@ -177,18 +186,55 @@ If the original function was not located and no action was taken in the user fun
 
 Why not print an error message and exit, or call some user-specified handler for such an error? Consider the case where the user function has been modified to never call the original function; it wouldn't _matter_ if the original were invalid. Verification is left to the user functions for this reason. (In such a case, it would make even more sense to modify the 'lib' file such that the original function is never queried.)
 
+### Environment variables
+
+The makefile uses quite a few variables, some which may need to be redefined by the user. These are listed below. `HEADER` and `APP` have default values specifically for building and running the demo.
+
+---
+#### `HEADER`
+_Default: `"test/int_args.h"`_
+
+All generated file names revolve around this. For example, if the default header is used, the following files will be generated:
+
+    test/interpose_lib_int_args.cpp
+    test/interpose_usr_int_args.cpp
+    test/libinterpose_int_args.so (.dylib on OS X)
+
+If you want to generated code for anything other than the demo, you'll have to redefine this. This must be specified for almost every single make target, including the `clean` targets.
+
+---
+#### `API_LIB` (OS X only)
+_Default: `"test/libint_args.dylib"`_
+
+On OS X, you must specify `API_LIB` every time you specify `HEADER` because the method for finding the original library call requires the original library path (unlike on Linux).
+
+---
+#### `APP`
+_Default: `"test/add 5 456 23 99 0 -100"`_
+
+Used by the `do-interpose`, `test`, and `demo` targets.
+
+---
+#### `NO_CHRONO`
+_Default: (unset)_
+
+By default, the timestamps are calculated with `<chrono>`. To drop `<chrono>` and fall back to `<sys/time.h>`, specify `NO_CHRONO=1`. Doing this avoids a dependency on libstdc++.
+
+---
+#### `CXX`
+_Default: `g++`_
+
+C++ compiler path. Use this if your C++11-compatible compiler is not in your `PATH`.
+
+---
+#### `CC`
+_Default: `gcc`_
+
+C compiler path, only needed for compiling the demo. Use this if your C99-compatible compiler is not in your `PATH`.
+
 Requirements
 ------------
 - Python 2.6 and [pycparser](http://code.google.com/p/pycparser/) (also [available in pip](http://pypi.python.org/pypi/pip)) for generating the interposing code
 - C++11-compatible compiler for compiling the interposing code (I've tested GCC 4.6.3, 4.7, and Clang 3.1)
 - C99-compatible compiler for compiling the demo
 - Linux or OS X
-
-Notes
------
-
-By default, the time-stamps are calculated with `<chrono>`. To drop `<chrono>` and fall back to `<sys/time.h>`, specify the `NO_CHRONO=1` flag. Doing this avoids a dependency on libstdc++.
-
-For OS X users: In addition to specifying `HEADER`, you must also specify `API_LIB` because the method for finding the original library call requires the original library (unlike on Linux).
-
-For users of compilers in non-standard locations: You can specify `CXX` as the path to the C++ compiler and `CC` as the path to the C compiler.
