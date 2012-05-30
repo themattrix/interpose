@@ -190,9 +190,8 @@ Why not print an error message and exit, or call some user-specified handler for
 
 The makefile uses quite a few variables, some which may need to be redefined by the user. These are listed below. `HEADER` and `APP` have default values specifically for building and running the demo.
 
----
-#### `HEADER`
-_Default: `"test/int_args.h"`_
+> #### `HEADER`
+> _Default: `"test/int_args.h"`_
 
 All generated file names revolve around this. For example, if the default header is used, the following files will be generated:
 
@@ -202,33 +201,28 @@ All generated file names revolve around this. For example, if the default header
 
 If you want to generated code for anything other than the demo, you'll have to redefine this. This must be specified for almost every single make target, including the `clean` targets.
 
----
-#### `API_LIB` (OS X only)
-_Default: `"test/libint_args.dylib"`_
+> #### `API_LIB` (OS X only)
+> _Default: `"test/libint_args.dylib"`_
 
 On OS X, you must specify `API_LIB` every time you specify `HEADER` because the method for finding the original library call requires the original library path (unlike on Linux).
 
----
-#### `APP`
-_Default: `"test/add 5 456 23 99 0 -100"`_
+> #### `APP`
+> _Default: `"test/add 5 456 23 99 0 -100"`_
 
 Used by the `do-interpose`, `test`, and `demo` targets.
 
----
-#### `NO_CHRONO`
-_Default: (unset)_
+> #### `NO_CHRONO`
+> _Default: (unset)_
 
 By default, the timestamps are calculated with `<chrono>`. To drop `<chrono>` and fall back to `<sys/time.h>`, specify `NO_CHRONO=1`. Doing this avoids a dependency on libstdc++.
 
----
-#### `CXX`
-_Default: `g++`_
+> #### `CXX`
+> _Default: `g++`_
 
 C++ compiler path. Use this if your C++11-compatible compiler is not in your `PATH`.
 
----
-#### `CC`
-_Default: `gcc`_
+> #### `CC`
+> _Default: `gcc`_
 
 C compiler path, only needed for compiling the demo. Use this if your C99-compatible compiler is not in your `PATH`.
 
@@ -238,3 +232,34 @@ Requirements
 - C++11-compatible compiler for compiling the interposing code (I've tested GCC 4.6.3, 4.7, and Clang 3.1)
 - C99-compatible compiler for compiling the demo
 - Linux or OS X
+
+Q/A
+---
+> ##### Why generate C++ code instead of C code?
+
+C++ allows for much less redundant code via templates. Templates also allow me to hide the original function type when passing it to the user functions. It's much nicer to deal with this:
+```C++
+Function original
+```
+than this:
+```C
+long long unsigned (*original)(wtf_t*[], int (*)(char, mander_t))
+```
+
+Truth be told, I _used_ to allow `NO_CPP=1` to be specified and the application would generate C code instead of C++ code. I removed that functionality because the generated code was gross. I could add it back in, but I really don't want to. _Don't make me add it back in!_
+
+> ##### Why C++11?
+
+Compiler support for C++18 is abysmal right now.
+
+> ##### What's with all the `auto function() -> int` nonsense?
+
+C++11 allows you to specify the return type after the function. It has some practical uses, but honestly I just like the syntax&mdash;it makes all the function names line up. _Just some syn-tac-tic sugar makes the C++ go down..._
+
+> ##### How much work does this actually save me?
+
+Oh, probably not much. The code to retrieve the original function is like two lines and you could just copy it out of my code.
+
+> ##### I was promised diamonds, but this just seems like a weak version of dtrace&mdash;why don't I use that instead?
+
+Yeah, dtrace would probably be easier.
