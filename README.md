@@ -30,7 +30,45 @@ _Without_ the interposing library loaded, the application output contains just t
 5 + 456 + 23 + 99 + 0 + -100 = 483
 </pre>
 
-The demo library being intercepted has the following public interface (`test/int_args.h`):
+The demo application&mdash;which produces the above output&mdash;is pretty simple (`test/add.c`):
+```C
+/* printf() */
+#include <stdio.h>
+
+/* *_int_args() */
+#include "int_args.h"
+
+int main(int argc, char *argv[])
+{
+   argc--;
+   argv++;
+
+   if(argc == 0)
+   {
+      printf("Error: no argument(s) specified; exiting\n");
+      return 1;
+   }
+
+   int *args = NULL;
+
+   if(extract_int_args(argc, argv, &args))
+   {
+      int sum = add_int_args(argc, args);
+
+      char pretty[512] = {0};
+
+      join_int_args(pretty, sizeof(pretty), argc, args, " + ");
+
+      release_int_args(&args);
+
+      printf("%s = %d\n", pretty, sum);
+   }
+
+   return 0;
+}
+```
+
+It excercises the following public interface (`test/int_args.h`):
 ```C
 /** Allocate an integer array equal in size to argc and fill it with integer
  ** representations of of the supplied command-line arguments.
@@ -137,7 +175,7 @@ The `original` function pointer is checked against `NULL` before each call to th
 
 If the original function was not located and no action was taken in the user function, the program will probably segfault. In most cases, that's probably what you want as it may indicate an error in the environment.
 
-Why not print an error message and exit, or call some user-specified handler for such an error? Consider the case where the user function has been modified to never call the original function; it wouldn't _matter_ if the original were invalid. Verification is left to the user functions for this reason.
+Why not print an error message and exit, or call some user-specified handler for such an error? Consider the case where the user function has been modified to never call the original function; it wouldn't _matter_ if the original were invalid. Verification is left to the user functions for this reason. (In such a case, it would make even more sense to modify the 'lib' file such that the original function is never queried.)
 
 Requirements
 ------------
