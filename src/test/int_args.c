@@ -5,11 +5,14 @@
 
 int extract_int_args(int argc, char *argv[], int **args)
 {
-   *args = (int *)malloc(argc * sizeof(int));
-
-   for(int i = 0; i < argc; ++i)
+   if(argc)
    {
-      (*args)[i] = atoi(argv[i]);
+      *args = (int *)malloc(argc * sizeof(int));
+
+      for(int i = 0; i < argc; ++i)
+      {
+         (*args)[i] = atoi(argv[i]);
+      }
    }
 
    return argc;
