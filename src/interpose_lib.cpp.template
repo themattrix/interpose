@@ -73,7 +73,7 @@ namespace util
          timeval time;
 
          // capture the current time
-         gettimeofday(&time, NULL);
+         gettimeofday(&time, nullptr);
 
          // return the time
          return time;
@@ -201,10 +201,10 @@ namespace util
 static auto proxy_{{NAME}}({{ARGUMENT_LIST}}) -> {{RETURN_TYPE}}
 {
    // stores the pointer to the original function
-   static {{RETURN_TYPE}} (*original)({{ARGUMENT_TYPES}}) = NULL;
+   static {{RETURN_TYPE}} (*original)({{ARGUMENT_TYPES}}) = nullptr;
 
    // attempt to locate the original function if it hasn't already been located
-   if(!original) original = util::get_function<{{RETURN_TYPE}} (*)({{ARGUMENT_TYPES}})>("{{NAME}}");
+   if(original == nullptr) original = util::get_function<{{RETURN_TYPE}} (*)({{ARGUMENT_TYPES}})>("{{NAME}}");
 
    // call the user wrapper for this function
    {{IF_NONVOID:return }}{{NAME}}(original{{,ARGUMENT_NAMES}});

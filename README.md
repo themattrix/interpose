@@ -178,7 +178,7 @@ $ make do-interpose HEADER=test/int_args.h APP="test/app 5 456 23 99 0 -100"
 
 ### Error checking
 
-The `original` function pointer is checked against `NULL` before each call to the user-defined function. If it is `NULL` (like on the first call to that function), then the original function is queried and saved. _Whether the query returned a valid pointer **or not**_, the user function _will be called_. This is important.
+The `original` function pointer is checked against `nullptr` before each call to the user-defined function. If it is `nullptr` (like on the first call to that function), then the original function is queried and saved. _Whether the query returned a valid pointer **or not**_, the user function _will be called_. This is important.
     
     It is entirely up to the user-defined function to provide error handling for an invalid original function.
 
