@@ -190,8 +190,8 @@ Why not print an error message and exit, or call some user-specified handler for
 
 The makefile uses quite a few variables, some which may need to be redefined by the user. These are listed below. `HEADER` and `APP` have default values specifically for building and running the demo.
 
-> #### `HEADER`
-> _Default: `"test/int_args.h"`_
+#### `HEADER`
+_Default: `"test/int_args.h"`_
 
 All generated file names revolve around this. For example, if the default header is used, the following files will be generated:
 
@@ -201,28 +201,33 @@ All generated file names revolve around this. For example, if the default header
 
 If you want to generated code for anything other than the demo, you'll have to redefine this. This must be specified for almost every single make target, including the `clean` targets.
 
-> #### `API_LIB` (OS X only)
-> _Default: `"test/libint_args.dylib"`_
+#### `DEST`
+_Default: (`HEADER` directory)_
+
+Optionally specify a destination directory for the interposing code and library. This is useful when `HEADER` is set to a system file, for example.
+
+#### `API_LIB` (OS X only)
+_Default: `"test/libint_args.dylib"`_
 
 On OS X, you must specify `API_LIB` every time you specify `HEADER` because the method for finding the original library call requires the original library path (unlike on Linux).
 
-> #### `APP`
-> _Default: `"test/add 5 456 23 99 0 -100"`_
+#### `APP`
+_Default: `"test/add 5 456 23 99 0 -100"`_
 
 Used by the `do-interpose`, `test`, and `demo` targets.
 
-> #### `NO_CHRONO`
-> _Default: (unset)_
+#### `NO_CHRONO`
+_Default: (unset)_
 
 By default, the timestamps are calculated with `<chrono>`. To drop `<chrono>` and fall back to `<sys/time.h>`, specify `NO_CHRONO=1`. Doing this avoids a dependency on libstdc++.
 
-> #### `CXX`
-> _Default: `g++`_
+#### `CXX`
+_Default: `g++`_
 
 C++ compiler path. Use this if your C++11-compatible compiler is not in your `PATH`.
 
-> #### `CC`
-> _Default: `gcc`_
+#### `CC`
+_Default: `gcc`_
 
 C compiler path, only needed for compiling the demo. Use this if your C99-compatible compiler is not in your `PATH`.
 
