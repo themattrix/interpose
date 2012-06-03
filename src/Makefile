@@ -21,6 +21,8 @@ HEADER_DIR  = $(shell dirname "$(HEADER)")
 HEADER_DIR ?= .
 HEADER_BASE = $(shell basename "$(HEADER)" .h)
 
+DEST  ?= $(HEADER_DIR)
+
 FLAGS ?= -fPIC -Wall -Werror -std=$(LANG_STD) $(CFLAGS)
 
 UNAME := $(shell uname)
@@ -32,9 +34,9 @@ ifeq ($(UNAME),Darwin)
    endif
    SHARED        = -dynamiclib
    SO            = dylib
-   INTERPOSE_LIB = $(HEADER_DIR)/libinterpose_$(HEADER_BASE).$(SO)
-   INTERPOSE_SRC = $(HEADER_DIR)/interpose_lib_$(HEADER_BASE).$(EXT)
-   PRELOAD       = DYLD_LIBRARY_PATH=$(HEADER_DIR) DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=$(INTERPOSE_LIB)
+   INTERPOSE_LIB = $(DEST)/libinterpose_$(HEADER_BASE).$(SO)
+   INTERPOSE_SRC = $(DEST)/interpose_lib_$(HEADER_BASE).$(EXT)
+   PRELOAD       = DYLD_LIBRARY_PATH=$(DEST) DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=$(INTERPOSE_LIB)
    DEFINES       = $(CHRONO_DEF)
    LIBS          = -ldl $(CHRONO_LIB)
 else
@@ -43,9 +45,9 @@ else
    endif
    SHARED        = -shared
    SO            = so
-   INTERPOSE_LIB = $(HEADER_DIR)/libinterpose_$(HEADER_BASE).$(SO)
-   INTERPOSE_SRC = $(HEADER_DIR)/interpose_lib_$(HEADER_BASE).$(EXT)
-   PRELOAD       = LD_LIBRARY_PATH=$(HEADER_DIR) LD_PRELOAD=$(INTERPOSE_LIB)
+   INTERPOSE_LIB = $(DEST)/libinterpose_$(HEADER_BASE).$(SO)
+   INTERPOSE_SRC = $(DEST)/interpose_lib_$(HEADER_BASE).$(EXT)
+   PRELOAD       = LD_LIBRARY_PATH=$(DEST) LD_PRELOAD=$(INTERPOSE_LIB)
    DEFINES       = -D_GNU_SOURCE $(CHRONO_DEF)
    LIBS          = -ldl $(CHRONO_LIB)
 endif
@@ -54,7 +56,7 @@ APP           ?= test/add 5 456 23 99 0 -100
 
 TEST_CMD      ?= $(PRELOAD) $(APP)
 
-INTERPOSE_CMD ?= ./interpose.py $(HEADER) $(API_LIB) lib=$(LIB_TEMPLATE) usr=$(USR_TEMPLATE)
+INTERPOSE_CMD ?= ./interpose.py $(DEST) $(HEADER) $(API_LIB) lib=$(LIB_TEMPLATE) usr=$(USR_TEMPLATE)
 
 all: interpose-src test
 
@@ -98,7 +100,7 @@ clean-src:
 	@echo
 	@echo "==========================================================[ Cleaning source ]==="
 	rm -f $(INTERPOSE_SRC)
-	rm -f $(HEADER_DIR)/interpose_usr_$(HEADER_BASE).$(EXT)
+	rm -f $(DEST)/interpose_usr_$(HEADER_BASE).$(EXT)
 
 clean-test:
 	make -C test clean

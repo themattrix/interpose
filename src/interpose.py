@@ -32,11 +32,12 @@ class Interpose(object):
        On OS X, use the following variables:
          DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=/path/to/lib.dylib
    """
-   def __init__(self, header, lib, templates, api):
+   def __init__(self, dest, header, lib, templates, api):
+      self.dest = dest
       self.header = header
       self.lib = lib
       self.api = api
-      self.header_path, self.header_base = split(self.header)
+      _, self.header_base = split(self.header)
       self.header_base = splitext(self.header_base)[0]
       self.templates = {}
       for t in templates:
@@ -44,6 +45,11 @@ class Interpose(object):
          ext = splitext(splitext(name)[0])[1]
          path = 'interpose_{0}_{1}{2}'.format(type, self.header_base, ext)
          self.templates[type] = name, path
+      self.header_include = self.header_base
+      for i in '/etc/include/', '/usr/include/', '/usr/local/include/', '/opt/local/include/':
+         if header.find(i) == 0:
+            self.header_include = header[len(i):]
+            break
    def __extract_label(self, template, label):
       """ Given the template string, "before{{LABEL:contents}}after", and the label, "LABEL", this
           function would return the tuple ("before", "after", "contents").
@@ -88,7 +94,7 @@ class Interpose(object):
       with open(template_file, 'r') as f:
          template = group_replace(
             f.read(),
-            (('{{ORIGINAL_HEADER}}', split(self.header)[1]),
+            (('{{ORIGINAL_HEADER}}', self.header_include),
              ('{{USER_DEFINED_FUNCTIONS}}', self.templates['usr'][1]),
              ('{{APPLE_LIB_NAME}}', split(self.lib)[1])))
          # Loop until we've filled all 'FOR_EACH_FUNCTION' templates
@@ -119,18 +125,23 @@ class Interpose(object):
       """ Write the generated code to their respective files. """
       for key, value in self.templates.iteritems():
          template_in, template_out = value
-         path = '{0}/{1}'.format(self.header_path or '.', template_out)
+         path = '{0}/{1}'.format(self.dest or '.', template_out)
          audit("Writing: {0}".format(path))
          with open(path, 'w') as f:
             f.write(self.__generate_code(template_in))
 
-class ParamListVisitor(c_generator.CGenerator):
+class CGenerator(c_generator.CGenerator):
+   def _get_name(self, n):
+      """ Returns the node name. This was split out from _generate_type() so that it could be
+          overridden independently.
+      """
+      return n.declname or ''
    def _generate_type(self, n, modifiers=[]):
       """ Recursive generation from a type node. n is the type node. 'modifiers' collects the
           PtrDecl, ArrayDecl and FuncDecl modifiers encountered on the way down to a TypeDecl, to
           allow proper generation from it.
 
-          Note: This is a lightly modified version of the parent method to NOT build in the names.
+          Note: This is a lightly modified version of the parent method to call _get_name().
       """
       typ = type(n)
       
@@ -139,8 +150,7 @@ class ParamListVisitor(c_generator.CGenerator):
          if n.quals: s += ' '.join(n.quals) + ' '
          s += self.visit(n.type)
          
-         # This was changed from the commented-out version so that no names are used
-         nstr = '' # n.declname if n.declname else ''
+         nstr = self._get_name(n)
          # Resolve modifiers.
          # Wrap in parens to distinguish pointer to array and pointer to
          # function syntax.
@@ -172,6 +182,28 @@ class ParamListVisitor(c_generator.CGenerator):
       else:
          return self.visit(n)
 
+class CGeneratorNoNames(CGenerator):
+   def __init__(self):
+      super(CGeneratorNoNames, self).__init__()
+   def _get_name(self, n):
+      """ Returns no name. """
+      return ''
+
+class CGeneratorForceNames(CGenerator):
+   def __init__(self):
+      super(CGeneratorForceNames, self).__init__()
+      self.index = 0
+   def _get_name(self, n):
+      """ Returns the node name or 'argN', where N is the 1-based argument index. """
+      self.index += 1
+      return n.declname or 'arg{0}'.format(self.index)
+
+def generate_names(args):
+   index = 0
+   for _, decl in args:
+      index += 1
+      yield decl.name or 'arg{0}'.format(index)
+
 class FuncDeclVisitor(c_ast.NodeVisitor):
    def __init__(self):
       super(FuncDeclVisitor, self).__init__()
@@ -185,18 +217,15 @@ class FuncDeclVisitor(c_ast.NodeVisitor):
             [4] comma-delimited argument names and types
       """
       if type(node.type) == c_ast.FuncDecl:
-         # decl.name can be None in the following situation:
-         #    int func(void);
-         # In this case, the argument list should be empty. For this reason, we store the list of argument
-         # names here so that the argument-types and argument-name-and-type lists can be skipped if there
-         # are no arguments.
-         arg_names = ', '.join((decl.name or '') for _, decl in node.type.args.children()) if node.type.args else ''
+         arg_types = CGeneratorNoNames().visit(node.type.args) if node.type.args else ''
+         if arg_types == 'void':
+            arg_types = ''
          self.functions.append((
             node.name,
-            ParamListVisitor()._generate_type(node.type.type),
-            arg_names,
-            ParamListVisitor().visit(node.type.args) if arg_names else '',
-            c_generator.CGenerator().visit(node.type.args) if arg_names else ''))
+            CGeneratorNoNames()._generate_type(node.type.type),
+            ', '.join(generate_names(node.type.args.children())) if arg_types else '',
+            arg_types,
+            CGeneratorForceNames().visit(node.type.args) if arg_types else ''))
 
 def parse_header(filename):
    visitor = FuncDeclVisitor()
@@ -206,8 +235,8 @@ def parse_header(filename):
 
 def main(args):
    try:
-      header, lib, templates = args[1], args[2], args[3:]
-      interpose = Interpose(header, lib, templates, api = parse_header(header))
+      dest, header, lib, templates = args[1], args[2], args[3], args[4:]
+      interpose = Interpose(dest, header, lib, templates, api = parse_header(header))
       interpose.write()
    except InvalidTemplateException as e:
       audit('[ERROR] {0}'.format(e))
