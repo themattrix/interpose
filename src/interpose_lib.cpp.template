@@ -79,17 +79,6 @@ namespace util
          return time;
       }
 
-      static void print_call(timeval const &call, std::string const &function)
-      {
-         printf
-         (
-            "[%011llu.%06llu][call].......... %s()\n",
-            static_cast<llu>(call.tv_sec),
-            static_cast<llu>(call.tv_usec),
-            function.c_str()
-         );
-      }
-
       static void print_done(timeval const &call, timeval const &done, std::string const &function)
       {
          long long unsigned diff = 
@@ -98,7 +87,7 @@ namespace util
 
          printf
          (
-            "[%011llu.%06llu][done][%llu.%06llu] %s()\n",
+            "%011llu.%06llu [%llu.%06llu] %s()\n",
             static_cast<llu>(done.tv_sec),
             static_cast<llu>(done.tv_usec),
             diff / 1000000ull,
@@ -127,15 +116,7 @@ namespace util
             :
             call(high_resolution_clock::now()),
             name(name)
-         {
-            // print the time-stamp
-            printf
-            (
-               "[%017.6f][call].......... %s()\n",
-               duration_cast<seconds>(call.time_since_epoch()).count(),
-               name.c_str()
-            );
-         }
+         {}
 
          public: ~StampBlock()
          {
@@ -145,7 +126,7 @@ namespace util
             // print the time-stamp and duration
             printf
             (
-               "[%017.6f][done][%08.6f] %s()\n",
+               "%017.6f [%08.6f] %s()\n",
                duration_cast<seconds>(done.time_since_epoch()).count(),
                duration_cast<seconds>(done - call).count(),
                name.c_str()
@@ -165,10 +146,7 @@ namespace util
             :
             call(time::current()),
             name(name)
-         {
-            // print the time-stamp
-            time::print_call(call, name);
-         }
+         {}
 
          public: ~StampBlock()
          {

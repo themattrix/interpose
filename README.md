@@ -12,18 +12,14 @@ In this demo, the files `test/interpose_lib_int_args.cpp` (the 'lib' file) and `
 
 The output should contain something like:
 <pre>
-[1338250882.859208][call].......... extract_int_args()
-[1338250882.859327][done][0.000119] extract_int_args()
-[1338250882.859373][call].......... add_int_args()
-[1338250882.859380][done][0.000007] add_int_args()
-[1338250882.859412][call].......... join_int_args()
-[1338250882.859430][done][0.000018] join_int_args()
-[1338250882.859457][call].......... release_int_args()
-[1338250882.859462][done][0.000005] release_int_args()
+1338250882.859327 [0.000119] extract_int_args()
+1338250882.859380 [0.000007] add_int_args()
+1338250882.859430 [0.000018] join_int_args()
+1338250882.859462 [0.000005] release_int_args()
 5 + 456 + 23 + 99 + 0 + -100 = 483
 </pre>
 
-What's happening here? All calls to this test library were interposed by our custom library. In this simple example the API calls are timestamped. All `[call]` and `[done]` lines contain a precise seconds&ndash;since&ndash;epoc timestamp plus the name of the function being called. `[done]` lines also contain a duration (in seconds) for that call.
+What's happening here? All calls to this test library were interposed by our custom library. In this simple example the API calls are timestamped. Each timestamped line contains a precise seconds&ndash;since&ndash;epoc timestamp, the duration of the function call (in seconds), and the name of the function being called.
 
 _Without_ the interposing library loaded, the application output contains just the final line:
 <pre>
@@ -165,14 +161,10 @@ $ make do-interpose HEADER=test/int_args.h APP="test/app 5 456 23 99 0 -100"
 
 <pre>
 <b>[INTERCEPTED] extract_int_args(6, {5, 456, 23, 99, 0, -100}, 0x7fff5fbff5e0)</b>
-[1338251018.159458][call].......... extract_int_args()
-[1338251018.159486][done][0.000028] extract_int_args()
-[1338251018.159511][call].......... add_int_args()
-[1338251018.159518][done][0.000007] add_int_args()
-[1338251018.159539][call].......... join_int_args()
-[1338251018.159553][done][0.000014] join_int_args()
-[1338251018.159572][call].......... release_int_args()
-[1338251018.159581][done][0.000009] release_int_args()
+1338251018.159486 [0.000028] extract_int_args()
+1338251018.159518 [0.000007] add_int_args()
+1338251018.159553 [0.000014] join_int_args()
+1338251018.159581 [0.000009] release_int_args()
 5 + 456 + 23 + 99 + 0 + -100 = 483
 </pre>
 
@@ -251,7 +243,7 @@ than this:
 long long unsigned (*original)(wtf_t*[], int (*)(char, mander_t))
 ```
 
-Truth be told, I _used_ to allow `NO_CPP=1` to be specified and the application would generate C code instead of C++ code. I removed that functionality because the generated code was gross. I could add it back in, but I really don't want to. _Don't make me add it back in!_
+Truth be told, I _used_ to allow `NO_CPP=1` to be specified and the application would generate C code instead of C++ code. I removed that functionality because the generated code was gross. I could add it back in, but I really don't want to.
 
 > ##### Why C++11?
 

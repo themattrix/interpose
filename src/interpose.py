@@ -5,24 +5,31 @@ from pycparser import c_generator, c_ast, parse_file
 from textwrap import dedent
 from sys import argv, exit
 
+
 class InvalidTemplateException(Exception):
    """ A template file has been determined to be invalid during parsing. """
+
    def __init__(self, msg):
       self.msg = msg
+
    def __str__(self):
       return self.__repr__()
+
    def __repr__(self):
       return 'Invalid template file: {0}'.format(self.msg)
+
 
 def audit(message):
    """ Currently just a thin wrapper for print(). """
    print(">>> {0}".format(message))
+
 
 def group_replace(text, replacements):
    """ Replaces every occurrence of each item in replacements in the given text. """
    for match, replace in replacements:
       text = text.replace(match, replace)
    return text
+
 
 class Interpose(object):
    """ Generate and write out code for interposing API calls. The resulting library code can be
@@ -32,25 +39,30 @@ class Interpose(object):
        On OS X, use the following variables:
          DYLD_FORCE_FLAT_NAMESPACE=1 DYLD_INSERT_LIBRARIES=/path/to/lib.dylib
    """
+
    def __init__(self, dest, header, lib, templates, api):
       self.dest = dest
       self.header = header
       self.lib = lib
       self.api = api
       _, self.header_base = split(self.header)
+      self.header_include = self.header_base
       self.header_base = splitext(self.header_base)[0]
       self.templates = {}
+
       for t in templates:
          type, name = t.split('=')
          ext = splitext(splitext(name)[0])[1]
          path = 'interpose_{0}_{1}{2}'.format(type, self.header_base, ext)
          self.templates[type] = name, path
-      self.header_include = self.header_base
+      
       for i in '/etc/include/', '/usr/include/', '/usr/local/include/', '/opt/local/include/':
          if header.find(i) == 0:
             self.header_include = header[len(i):]
             break
-   def __extract_label(self, template, label):
+
+   @staticmethod
+   def __extract_label(template, label):
       """ Given the template string, "before{{LABEL:contents}}after", and the label, "LABEL", this
           function would return the tuple ("before", "after", "contents").
       """
@@ -81,13 +93,15 @@ class Interpose(object):
          raise InvalidTemplateException("non-terminating '{0}' label".format(label))
       # Adjust for the terminating }} being two characters wide
       return template[:loc], cut[c_pos + 1:], cut[:c_pos - 1]
+
    def __replace_conditional(self, text, condition, truth):
       while True:
-         pre, post, extract = self.__extract_label(text, 'IF_' + condition)
+         pre, post, extract = Interpose.__extract_label(text, 'IF_' + condition)
          if not extract:
             break
          text = '{0}{1}{2}'.format(pre, extract if truth else '', post)
       return text
+
    def __generate_code(self, template_file):
       """ Fills out the provided template with this API. """
       template = ''
@@ -121,6 +135,7 @@ class Interpose(object):
                func_group += '\n{0}\n'.format(func_src)
             template = '{0}{1}{2}'.format(template_pre, func_group.strip(), template_post)
       return template
+
    def write(self):
       """ Write the generated code to their respective files. """
       for key, value in self.templates.iteritems():
@@ -130,18 +145,22 @@ class Interpose(object):
          with open(path, 'w') as f:
             f.write(self.__generate_code(template_in))
 
+
 class CGenerator(c_generator.CGenerator):
+   """ Generates C code from an AST. This is modified from the parent class to call _get_name()
+       when looking up the node name.
+   """
+
    def _get_name(self, n):
       """ Returns the node name. This was split out from _generate_type() so that it could be
           overridden independently.
       """
       return n.declname or ''
+
    def _generate_type(self, n, modifiers=[]):
       """ Recursive generation from a type node. n is the type node. 'modifiers' collects the
           PtrDecl, ArrayDecl and FuncDecl modifiers encountered on the way down to a TypeDecl, to
           allow proper generation from it.
-
-          Note: This is a lightly modified version of the parent method to call _get_name().
       """
       typ = type(n)
       
@@ -182,34 +201,50 @@ class CGenerator(c_generator.CGenerator):
       else:
          return self.visit(n)
 
+
 class CGeneratorNoNames(CGenerator):
+   """ Like the parent class, but uses no names. """
+
    def __init__(self):
       super(CGeneratorNoNames, self).__init__()
+
    def _get_name(self, n):
-      """ Returns no name. """
+      """ Returns an empty name. """
       return ''
 
+
 class CGeneratorForceNames(CGenerator):
+   """ Like the parent class, but forces names, even when none are defined. """
+
    def __init__(self):
       super(CGeneratorForceNames, self).__init__()
       self.index = 0
+
    def _get_name(self, n):
       """ Returns the node name or 'argN', where N is the 1-based argument index. """
       self.index += 1
       return n.declname or 'arg{0}'.format(self.index)
 
+
 def generate_names(args):
+   """ Yield names for the arguments, forcing 'argN' (where N is the 1-based argument index) when
+       an argument has no name.
+   """
    index = 0
    for _, decl in args:
       index += 1
       yield decl.name or 'arg{0}'.format(index)
 
+
 class FuncDeclVisitor(c_ast.NodeVisitor):
+   """ Walks every function declaration in the provided AST, appending each to a list. """
+
    def __init__(self):
       super(FuncDeclVisitor, self).__init__()
       self.functions = []
+
    def visit_Decl(self, node):
-      """ For each encountered function declaration, this function records a tuple of the following values:
+      """ For each encountered function declaration, this function records the following tuple:
             [0] function name
             [1] return type
             [2] comma-delimited argument names
@@ -217,21 +252,26 @@ class FuncDeclVisitor(c_ast.NodeVisitor):
             [4] comma-delimited argument names and types
       """
       if type(node.type) == c_ast.FuncDecl:
+         func_name = node.name
+         return_type = CGeneratorNoNames()._generate_type(node.type.type)
          arg_types = CGeneratorNoNames().visit(node.type.args) if node.type.args else ''
+
          if arg_types == 'void':
             arg_types = ''
-         self.functions.append((
-            node.name,
-            CGeneratorNoNames()._generate_type(node.type.type),
-            ', '.join(generate_names(node.type.args.children())) if arg_types else '',
-            arg_types,
-            CGeneratorForceNames().visit(node.type.args) if arg_types else ''))
+
+         arg_names = ', '.join(generate_names(node.type.args.children())) if arg_types else ''
+         arg_list = CGeneratorForceNames().visit(node.type.args) if arg_types else ''
+
+         self.functions.append((func_name, return_type, arg_names, arg_types, arg_list))
+
 
 def parse_header(filename):
+   """ Parse the specified C header file and return a list of functions per FuncDeclVisitor. """
    visitor = FuncDeclVisitor()
    ast = parse_file(filename, use_cpp = True)
    visitor.visit(ast)
    return visitor.functions
+
 
 def main(args):
    try:
