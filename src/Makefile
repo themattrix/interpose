@@ -30,7 +30,7 @@ UNAME := $(shell uname)
 ifeq ($(UNAME),Darwin)
    ifeq ($(API_LIB),)
       API_LIB = test/libint_args.dylib
-      $(warning No library file specified with "API=LIB=..." (required on OS X), defaulting to "API_LIB=$(API_LIB)")
+      $(warning No library file specified with "API_LIB=..." (required on OS X), defaulting to "API_LIB=$(API_LIB)")
    endif
    SHARED        = -dynamiclib
    SO            = dylib
